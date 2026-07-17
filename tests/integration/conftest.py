@@ -85,6 +85,9 @@ async def seeded(
 
     async with session_factory() as session:
         await session.execute(
-            text("TRUNCATE report_chunks, report_analyses, reports RESTART IDENTITY CASCADE")
+            text(
+                "TRUNCATE report_chunks, report_analyses, reports, "
+                "monthly_reports, audit_logs RESTART IDENTITY CASCADE"
+            )
         )
         await session.commit()

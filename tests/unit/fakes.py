@@ -145,6 +145,27 @@ class CitingFakeLLM:
         return _Stream()
 
 
+class FakePdfRenderer:
+    """WeasyPrint を使わない決定的 PDF レンダラ（ホスト/CI でネイティブ依存を避ける）。"""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    async def render(self, *, title: str, body_markdown: str) -> bytes:
+        self.calls.append((title, body_markdown))
+        return b"%PDF-1.4 fake\n" + body_markdown.encode("utf-8") + b"\n%%EOF"
+
+
+class FakeAudit:
+    """監査ログの記録を検証するための Fake。"""
+
+    def __init__(self) -> None:
+        self.records: list[dict[str, object]] = []
+
+    async def record(self, *, user_id: int, action: str, payload: dict[str, object]) -> None:
+        self.records.append({"user_id": user_id, "action": action, "payload": payload})
+
+
 def make_hit(report_id: int, *, summary: str = "要約", property_id: int = 101) -> SearchHit:
     return SearchHit(
         report_id=report_id,

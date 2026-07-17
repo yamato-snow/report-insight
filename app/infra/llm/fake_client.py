@@ -11,6 +11,8 @@ from app.domain.entities import (
     ClassificationEnvelope,
     ClassificationResult,
     LLMCallMeta,
+    MonthlyNarration,
+    MonthlyStats,
     SearchHit,
 )
 from app.domain.values import Category, Urgency
@@ -74,6 +76,26 @@ class FakeLLMClient:
 
     def stream_answer(self, query: str, sources: Sequence[SearchHit]) -> _FakeAnswerStream:
         return _FakeAnswerStream(query, sources)
+
+    async def narrate_monthly(self, *, property_name: str, stats: MonthlyStats) -> MonthlyNarration:
+        # 決定的な所見（実APIを呼ばない）。数値は stats のみを参照する。
+        top_category = max(stats.by_category.items(), key=lambda kv: kv[1], default=None)
+        if stats.total == 0:
+            body = f"{property_name}では対象月の報告はありませんでした。"
+        else:
+            lead = f"{property_name}では当月{stats.total}件の報告がありました。"
+            if top_category is not None and top_category[1] > 0:
+                lead += f"最多の分類は「{top_category[0].value}」で{top_category[1]}件でした。"
+            if stats.action_required > 0:
+                lead += f"うち{stats.action_required}件が要対応であり、優先的な確認が必要です。"
+            body = lead
+        meta = LLMCallMeta(
+            model_id="fake-generate",
+            prompt_version=str(load_prompt("monthly_v1").get("version", "monthly_v1")),
+            input_tokens=_estimate_tokens(property_name) + stats.total,
+            output_tokens=_estimate_tokens(body),
+        )
+        return MonthlyNarration(body=body, meta=meta)
 
     @staticmethod
     def _classify_category(text: str) -> Category:

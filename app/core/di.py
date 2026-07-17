@@ -16,6 +16,8 @@ from app.infra.aws.client import AwsConfig, make_session
 from app.infra.aws.s3 import S3ObjectStorage
 from app.infra.aws.sqs import SqsConsumer
 from app.infra.db.repositories import (
+    SqlAuditRepository,
+    SqlMonthlyReportRepository,
     SqlReportRepository,
     SqlSearchRepository,
     SqlUserRepository,
@@ -26,12 +28,15 @@ from app.infra.llm.anthropic_client import AnthropicLLMClient
 from app.infra.llm.fake_client import FakeLLMClient
 from app.infra.masking.pii import PIIMasker
 from app.infra.notify.slack import SlackNotifier
+from app.infra.pdf.renderer import WeasyPrintPdfRenderer
 from app.services.ingest import IngestService
+from app.services.monthly import MonthlyService
 from app.services.ports import (
     EmbeddingClient,
     LLMClient,
     NotificationPort,
     ObjectStoragePort,
+    PdfRendererPort,
     PIIMaskerPort,
 )
 from app.services.search import SearchService
@@ -50,6 +55,7 @@ class Container:
     storage: ObjectStoragePort
     notifier: NotificationPort
     sqs: SqsConsumer
+    pdf_renderer: PdfRendererPort
 
     def ingest_service(self, session: AsyncSession) -> IngestService:
         return IngestService(
@@ -67,6 +73,14 @@ class Container:
             llm=self.llm,
             embedder=self.embedder,
             repository=SqlSearchRepository(session),
+        )
+
+    def monthly_service(self, session: AsyncSession) -> MonthlyService:
+        return MonthlyService(
+            llm=self.llm,
+            repository=SqlMonthlyReportRepository(session),
+            audit=SqlAuditRepository(session),
+            permissions=SqlSearchRepository(session),
         )
 
     def user_repository(self, session: AsyncSession) -> SqlUserRepository:
@@ -114,4 +128,5 @@ def build_container(settings: Settings) -> Container:
         storage=S3ObjectStorage(aws_session, aws_config, settings.s3_inbox_bucket),
         notifier=SlackNotifier(settings.slack_webhook_url),
         sqs=SqsConsumer(aws_session, aws_config, settings.sqs_queue_url),
+        pdf_renderer=WeasyPrintPdfRenderer(),
     )

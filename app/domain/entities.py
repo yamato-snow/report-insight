@@ -148,3 +148,24 @@ class MonthlyReport(BaseModel):
     status: MonthlyStatus
     approved_by: int | None = None
     approved_at: datetime | None = None
+
+
+class MonthlyStats(BaseModel):
+    """月次の件数サマリ（SQLで確定計算。数値ハルシネーション防止のため LLM には渡さず、
+    本文の数表はこの値から決定的に生成する。基本設計 §2.3 / LLM設計書 §2）。"""
+
+    model_config = ConfigDict(frozen=True)
+
+    property_id: int
+    month: date
+    total: int
+    by_category: dict[Category, int] = Field(default_factory=dict)
+    by_urgency: dict[Urgency, int] = Field(default_factory=dict)
+    action_required: int = 0
+
+
+class MonthlyNarration(BaseModel):
+    """月次報告書の所見（LLM が数値サマリを文章化した散文＋呼び出しメタ）。"""
+
+    body: str
+    meta: LLMCallMeta

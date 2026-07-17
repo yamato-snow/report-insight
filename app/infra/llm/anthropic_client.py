@@ -22,6 +22,8 @@ from app.domain.entities import (
     ClassificationEnvelope,
     ClassificationResult,
     LLMCallMeta,
+    MonthlyNarration,
+    MonthlyStats,
     SearchHit,
 )
 from app.domain.errors import RetryableError
@@ -52,6 +54,7 @@ class AnthropicLLMClient:
         self._model_generate = model_generate
         self._classify_prompt = load_prompt("classify_v1")
         self._answer_prompt = load_prompt("answer_v1")
+        self._monthly_prompt = load_prompt("monthly_v1")
 
     async def classify_report(self, masked_text: str) -> ClassificationEnvelope:
         tool = self._classify_prompt["tool"]
@@ -96,6 +99,41 @@ class AnthropicLLMClient:
         )
         return ClassificationEnvelope(result=result, meta=meta)
 
+    async def narrate_monthly(self, *, property_name: str, stats: MonthlyStats) -> MonthlyNarration:
+        try:
+            response = await self._client.messages.create(
+                model=self._model_generate,
+                max_tokens=512,
+                system=[
+                    {
+                        "type": "text",
+                        "text": self._monthly_prompt["system"],
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"<stats>\n{_render_stats(property_name, stats)}\n</stats>",
+                    }
+                ],
+            )
+        except Exception as exc:
+            raise _to_retryable(exc) from exc
+
+        body = "".join(
+            getattr(block, "text", "")
+            for block in response.content
+            if getattr(block, "type", None) == "text"
+        ).strip()
+        meta = LLMCallMeta(
+            model_id=self._model_generate,
+            prompt_version=str(self._monthly_prompt["version"]),
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+        )
+        return MonthlyNarration(body=body, meta=meta)
+
     def stream_answer(self, query: str, sources: Sequence[SearchHit]) -> _AnthropicAnswerStream:
         return _AnthropicAnswerStream(
             client=self._client,
@@ -112,6 +150,21 @@ def _extract_tool_input(response: Any, tool_name: str) -> dict[str, Any]:
         if getattr(block, "type", None) == "tool_use" and block.name == tool_name:
             return dict(block.input)
     raise RetryableError("LLM がツール呼び出しを返しませんでした")
+
+
+def _render_stats(property_name: str, stats: MonthlyStats) -> str:
+    """確定集計を LLM 入力用のプレーンテキストへ整形する（数値はここが唯一の出所）。"""
+    lines = [
+        f"物件: {property_name}",
+        f"対象月: {stats.month.year}年{stats.month.month}月",
+        f"総報告件数: {stats.total}",
+        f"要対応件数: {stats.action_required}",
+        "分類別:",
+    ]
+    lines += [f"  - {cat.value}: {n}" for cat, n in stats.by_category.items()]
+    lines.append("緊急度別:")
+    lines += [f"  - {urg.value}: {n}" for urg, n in stats.by_urgency.items()]
+    return "\n".join(lines)
 
 
 def _render_sources(sources: Sequence[SearchHit]) -> str:

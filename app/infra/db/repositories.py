@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import UTC, date, datetime
 
-from sqlalchemy import ColumnElement, and_, insert, select
+from sqlalchemy import ColumnElement, and_, func, insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.domain.entities import (
+    MonthlyReport,
+    MonthlyStats,
     Property,
     Report,
     ReportAnalysis,
@@ -18,10 +21,11 @@ from app.domain.entities import (
     User,
 )
 from app.domain.errors import NotFoundError, PermissionDeniedError
-from app.domain.values import AnalysisStatus, Category, Urgency
+from app.domain.values import AnalysisStatus, Category, MonthlyStatus, Urgency
 from app.infra.db import models
 from app.infra.db.mappers import (
     analysis_to_domain,
+    monthly_to_domain,
     property_to_domain,
     report_to_domain,
     user_to_domain,
@@ -236,3 +240,168 @@ class SqlSearchRepository:
         )
         rows = (await self._session.execute(stmt)).scalars().all()
         return set(rows)
+
+
+def _month_bounds(month: date) -> tuple[datetime, datetime]:
+    """対象月の [月初, 翌月初) を timezone-aware で返す。"""
+    start = datetime(month.year, month.month, 1, tzinfo=UTC)
+    if month.month == 12:
+        end = datetime(month.year + 1, 1, 1, tzinfo=UTC)
+    else:
+        end = datetime(month.year, month.month + 1, 1, tzinfo=UTC)
+    return start, end
+
+
+class SqlMonthlyReportRepository:
+    """MonthlyReportRepository の SQLAlchemy 実装（F-3）。"""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def compute_stats(self, property_id: int, month: date) -> MonthlyStats:
+        start, end = _month_bounds(month)
+        month_filter = and_(
+            models.Report.property_id == property_id,
+            models.Report.reported_at >= start,
+            models.Report.reported_at < end,
+        )
+
+        by_category: dict[Category, int] = {}
+        cat_stmt = (
+            select(models.ReportAnalysis.category, func.count().label("n"))
+            .join(models.Report, models.Report.id == models.ReportAnalysis.report_id)
+            .where(month_filter)
+            .group_by(models.ReportAnalysis.category)
+        )
+        for category_value, n in (await self._session.execute(cat_stmt)).all():
+            by_category[Category(category_value)] = int(n)
+
+        by_urgency: dict[Urgency, int] = {}
+        urg_stmt = (
+            select(models.ReportAnalysis.urgency, func.count().label("n"))
+            .join(models.Report, models.Report.id == models.ReportAnalysis.report_id)
+            .where(month_filter)
+            .group_by(models.ReportAnalysis.urgency)
+        )
+        for urgency_value, n in (await self._session.execute(urg_stmt)).all():
+            by_urgency[Urgency(urgency_value)] = int(n)
+
+        total = sum(by_category.values())
+        action_stmt = (
+            select(func.count())
+            .select_from(models.ReportAnalysis)
+            .join(models.Report, models.Report.id == models.ReportAnalysis.report_id)
+            .where(and_(month_filter, models.ReportAnalysis.action_required.is_(True)))
+        )
+        action_required = int((await self._session.execute(action_stmt)).scalar_one())
+
+        return MonthlyStats(
+            property_id=property_id,
+            month=month,
+            total=total,
+            by_category=by_category,
+            by_urgency=by_urgency,
+            action_required=action_required,
+        )
+
+    async def property_name(self, property_id: int) -> str:
+        name = (
+            await self._session.execute(
+                select(models.Property.name).where(models.Property.id == property_id)
+            )
+        ).scalar_one_or_none()
+        if name is None:
+            raise NotFoundError(f"property_id={property_id} は存在しません")
+        return name
+
+    async def create_generating(
+        self, property_id: int, month: date, permitted_property_ids: Sequence[int]
+    ) -> MonthlyReport:
+        if property_id not in set(permitted_property_ids):
+            raise PermissionDeniedError(f"property_id={property_id} へのアクセス権がありません")
+
+        current_max = (
+            await self._session.execute(
+                select(func.max(models.MonthlyReport.version)).where(
+                    and_(
+                        models.MonthlyReport.property_id == property_id,
+                        models.MonthlyReport.month == month,
+                    )
+                )
+            )
+        ).scalar_one_or_none()
+        version = (current_max or 0) + 1
+
+        row_id = (
+            await self._session.execute(
+                insert(models.MonthlyReport)
+                .values(
+                    property_id=property_id,
+                    month=month,
+                    version=version,
+                    body_markdown="",
+                    status=MonthlyStatus.GENERATING.value,
+                )
+                .returning(models.MonthlyReport.id)
+            )
+        ).scalar_one()
+        return await self.get_internal(row_id)
+
+    async def get(self, monthly_id: int, permitted_property_ids: Sequence[int]) -> MonthlyReport:
+        report = await self.get_internal(monthly_id)
+        if report.property_id not in set(permitted_property_ids):
+            raise PermissionDeniedError(f"monthly_id={monthly_id} へのアクセス権がありません")
+        return report
+
+    async def get_internal(self, monthly_id: int) -> MonthlyReport:
+        row = (
+            await self._session.execute(
+                select(models.MonthlyReport).where(models.MonthlyReport.id == monthly_id)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            raise NotFoundError(f"monthly_id={monthly_id} は存在しません")
+        return monthly_to_domain(row)
+
+    async def set_body(
+        self, monthly_id: int, body_markdown: str, status: MonthlyStatus
+    ) -> MonthlyReport:
+        row = (
+            await self._session.execute(
+                select(models.MonthlyReport).where(models.MonthlyReport.id == monthly_id)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            raise NotFoundError(f"monthly_id={monthly_id} は存在しません")
+        row.body_markdown = body_markdown
+        row.status = status.value
+        await self._session.flush()
+        return monthly_to_domain(row)
+
+    async def approve(
+        self, monthly_id: int, approver_id: int, approved_at: datetime
+    ) -> MonthlyReport:
+        row = (
+            await self._session.execute(
+                select(models.MonthlyReport).where(models.MonthlyReport.id == monthly_id)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            raise NotFoundError(f"monthly_id={monthly_id} は存在しません")
+        row.status = MonthlyStatus.APPROVED.value
+        row.approved_by = approver_id
+        row.approved_at = approved_at
+        await self._session.flush()
+        return monthly_to_domain(row)
+
+
+class SqlAuditRepository:
+    """AuditPort の SQLAlchemy 実装（検索・承認・分類上書きの追記専用ログ）。"""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def record(self, *, user_id: int, action: str, payload: dict[str, object]) -> None:
+        await self._session.execute(
+            insert(models.AuditLog).values(user_id=user_id, action=action, payload=payload)
+        )

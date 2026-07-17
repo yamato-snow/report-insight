@@ -48,6 +48,14 @@ class Role(StrEnum):
     QA = "qa"
 
 
+class AuditAction(StrEnum):
+    """監査ログの操作種別（DB設計書 04: audit_logs.action / 09 §6）。"""
+
+    SEARCH = "search"
+    APPROVE_MONTHLY = "approve_monthly"
+    OVERRIDE_ANALYSIS = "override_analysis"
+
+
 # --- 定数 ---------------------------------------------------------------
 
 # confidence 閾値の既定値。実運用値は env(CONFIDENCE_THRESHOLD) で上書きし、

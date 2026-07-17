@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from app.domain.entities import Property, Report, ReportAnalysis, User
-from app.domain.values import AnalysisStatus, Category, Role, Urgency
+from app.domain.entities import MonthlyReport, Property, Report, ReportAnalysis, User
+from app.domain.values import AnalysisStatus, Category, MonthlyStatus, Role, Urgency
 from app.infra.db import models
 
 
@@ -39,6 +39,19 @@ def analysis_to_domain(row: models.ReportAnalysis) -> ReportAnalysis:
         input_tokens=row.input_tokens,
         output_tokens=row.output_tokens,
         analyzed_at=row.analyzed_at,
+    )
+
+
+def monthly_to_domain(row: models.MonthlyReport) -> MonthlyReport:
+    return MonthlyReport(
+        id=row.id,
+        property_id=row.property_id,
+        month=row.month,
+        version=row.version,
+        body_markdown=row.body_markdown,
+        status=MonthlyStatus(row.status),
+        approved_by=row.approved_by,
+        approved_at=row.approved_at,
     )
 
 

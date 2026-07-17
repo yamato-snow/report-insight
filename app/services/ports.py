@@ -7,19 +7,23 @@ infra/ の実装と tests の Fake が同じ Protocol を満たす。
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
+from datetime import date, datetime
 from typing import Protocol, runtime_checkable
 
 from app.domain.entities import (
     ClassificationEnvelope,
     LLMCallMeta,
     MaskingResult,
+    MonthlyNarration,
+    MonthlyReport,
+    MonthlyStats,
     Report,
     ReportAnalysis,
     SearchFilters,
     SearchHit,
     User,
 )
-from app.domain.values import Category, Urgency
+from app.domain.values import Category, MonthlyStatus, Urgency
 
 
 @runtime_checkable
@@ -41,6 +45,10 @@ class LLMClient(Protocol):
 
     def stream_answer(self, query: str, sources: Sequence[SearchHit]) -> AnswerStream:
         """検索結果を根拠に回答を生成しストリーミングする（引用は [report:ID] 形式）。"""
+        ...
+
+    async def narrate_monthly(self, *, property_name: str, stats: MonthlyStats) -> MonthlyNarration:
+        """確定済みの件数サマリを散文化する（数値は stats のみが正。捏造禁止。基本設計 §2.3）。"""
         ...
 
 
@@ -122,3 +130,65 @@ class SearchRepository(Protocol):
     ) -> set[int]:
         """引用の実在検証（権限内に実在するIDのみ返す。LLM設計書 §2）。"""
         ...
+
+
+class PermissionResolver(Protocol):
+    """利用者の物件アクセス範囲を解決する（認可の単一ソース。基本設計 §3）。"""
+
+    async def permitted_property_ids(self, user: User) -> list[int]:
+        """利用者がアクセス可能な物件ID一覧（qa は全件）。"""
+        ...
+
+
+class MonthlyReportRepository(Protocol):
+    """月次報告書の永続化・状態遷移・件数集計（F-3。DB設計書 04）。
+
+    認可は permitted_property_ids で強制する。状態遷移（generating→draft→approved）の
+    ビジネス判断は services 側に置き、ここは行の読み書きに徹する。
+    """
+
+    async def compute_stats(self, property_id: int, month: date) -> MonthlyStats:
+        """対象物件・対象月の報告書を SQL で集計する（分類別・緊急度別の確定値）。"""
+        ...
+
+    async def property_name(self, property_id: int) -> str:
+        """物件名（本文タイトル・所見プロンプト用）。不在は NotFound。"""
+        ...
+
+    async def create_generating(
+        self, property_id: int, month: date, permitted_property_ids: Sequence[int]
+    ) -> MonthlyReport:
+        """新規世代を generating で作成（同一物件×月は version+1）。範囲外は PermissionDenied。"""
+        ...
+
+    async def get(self, monthly_id: int, permitted_property_ids: Sequence[int]) -> MonthlyReport:
+        """権限内の月次報告書を1件取得。不在/範囲外は NotFound/PermissionDenied。"""
+        ...
+
+    async def get_internal(self, monthly_id: int) -> MonthlyReport:
+        """生成ジョブ（システム実行・認可なし）用の取得。API から直接は使わない。"""
+        ...
+
+    async def set_body(
+        self, monthly_id: int, body_markdown: str, status: MonthlyStatus
+    ) -> MonthlyReport:
+        """本文と状態を更新（generating→draft、または draft の保存・failed 転落）。"""
+        ...
+
+    async def approve(
+        self, monthly_id: int, approver_id: int, approved_at: datetime
+    ) -> MonthlyReport:
+        """承認（→approved・承認者/時刻を記録）。呼び出し側で状態を検証済みの前提。"""
+        ...
+
+
+class AuditPort(Protocol):
+    """監査ログの記録（検索・承認・分類上書き。DB設計書 04 / 09 §6）。"""
+
+    async def record(self, *, user_id: int, action: str, payload: dict[str, object]) -> None: ...
+
+
+class PdfRendererPort(Protocol):
+    """Markdown 本文を PDF 化する（F-3。ネイティブ依存はコンテナ内に閉じる）。"""
+
+    async def render(self, *, title: str, body_markdown: str) -> bytes: ...

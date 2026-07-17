@@ -9,11 +9,18 @@ from fastapi import Depends, Header, HTTPException, Request
 from app.core.di import Container
 from app.domain.entities import User
 from app.domain.errors import NotFoundError
+from app.services.ports import PdfRendererPort
 
 
 def get_container(request: Request) -> Container:
     container: Container = request.app.state.container
     return container
+
+
+def get_pdf_renderer(request: Request) -> PdfRendererPort:
+    """PDF レンダラ（テストは dependency_overrides で Fake に差し替える）。"""
+    container: Container = request.app.state.container
+    return container.pdf_renderer
 
 
 async def get_current_user(
@@ -37,3 +44,4 @@ async def get_current_user(
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
 ContainerDep = Annotated[Container, Depends(get_container)]
+PdfRendererDep = Annotated[PdfRendererPort, Depends(get_pdf_renderer)]
