@@ -172,6 +172,7 @@ graph LR
 
 - LLM 回帰評価は `prompts/` 配下の変更を検知した時のみ実行（コスト制御）。詳細は[LLM設計書](05_llm_design.md)
 - マイグレーションは Alembic。デプロイ前に自動適用
+- **セキュリティゲート（gitleaks/SAST/SCA/IaC/イメージスキャン）・OIDC・ロールバック戦略を含むパイプラインの正式定義は[CI/CD・DevSecOps設計](09_cicd_devsecops.md)**。本節は概要のみ
 
 ## 7. アプリケーション構成
 
