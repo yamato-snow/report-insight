@@ -1,0 +1,100 @@
+# Report Insight — ローカル開発環境（開発環境 08 §3）
+# 本番との差分は「AWSエンドポイントURL」の env 1点に閉じる（アーキテクチャ規約 §3）
+
+x-app-env: &app-env
+  LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  MODEL_CLASSIFY: ${MODEL_CLASSIFY:-claude-haiku-4-5-20251001}
+  MODEL_GENERATE: ${MODEL_GENERATE:-claude-sonnet-5}
+  LLM_MAX_CONCURRENCY: ${LLM_MAX_CONCURRENCY:-4}
+  CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD:-0.85}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-intfloat/multilingual-e5-large}
+  EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+  AWS_ENDPOINT_URL: http://localstack:4566
+  AWS_REGION: ${AWS_REGION:-ap-northeast-1}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+  S3_INBOX_BUCKET: ${S3_INBOX_BUCKET:-report-inbox}
+  SQS_QUEUE_URL: http://localstack:4566/000000000000/report-queue
+  DATABASE_URL: postgresql+asyncpg://app:app@db:5432/report_insight
+  SLACK_WEBHOOK_URL: http://webhook-mock:9000/webhook
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: report_insight
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d report_insight"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  localstack:
+    image: localstack/localstack:3
+    environment:
+      SERVICES: s3,sqs
+      AWS_DEFAULT_REGION: ${AWS_REGION:-ap-northeast-1}
+    ports:
+      - "4566:4566"
+    volumes:
+      - ./scripts/localstack-init.sh:/etc/localstack/init/ready.d/init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "awslocal sqs get-queue-url --queue-name report-queue || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  api:
+    build: .
+    environment: *app-env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./scripts:/app/scripts
+      - ./tests:/app/tests
+      - fastembed-cache:/root/.cache/fastembed
+    depends_on:
+      db:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    command: >
+      uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build: .
+    environment: *app-env
+    volumes:
+      - ./app:/app/app
+      - ./scripts:/app/scripts
+      - fastembed-cache:/root/.cache/fastembed
+    depends_on:
+      db:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    command: >
+      watchfiles "python -m app.worker.main" app
+
+  webhook-mock:
+    build: .
+    environment: *app-env
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./tools:/app/tools
+    command: >
+      uvicorn tools.webhook_mock:app --host 0.0.0.0 --port 9000
+
+volumes:
+  db-data:
+  fastembed-cache:

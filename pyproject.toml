@@ -1,0 +1,147 @@
+[project]
+name = "report-insight"
+version = "0.1.0"
+description = "現場報告書のLLM構造化・RAG検索・月次報告書生成（AIソリューション受託ポートフォリオ）"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pgvector>=0.3.6",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "structlog>=24.4",
+    "anthropic>=0.40",
+    "fastembed>=0.4",
+    "aioboto3>=13.2",
+    "httpx>=0.27",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.12",
+    "sudachipy>=0.6.8",
+    "sudachidict-core>=20241021",
+    "weasyprint>=63",
+    "markdown-it-py>=3.0",
+    "pyyaml>=6.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "import-linter>=2.1",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "testcontainers[postgres]>=4.8",
+    "respx>=0.21",
+    "types-aioboto3[essential]>=13.2",
+    "bandit>=1.8",
+    "pip-audit>=2.7",
+    "pre-commit>=4.0",
+    "types-pyyaml>=6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# ---------------------------------------------------------------------------
+# ruff — lint + format（コーディング規約 §1）
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "PL", "RUF", "T20", "BLE"]
+# S: bandit系セキュリティ / ASYNC: ブロッキングI/O検出 / PL: pylint系
+# T20: print禁止（規約 §5）/ BLE: 握りつぶし禁止（規約 §4）
+ignore = [
+    "PLR2004", # magic value: テスト・閾値比較で多用するため
+    "PLR0913", # too many arguments: DIで依存注入する関数で発生
+    "RUF001", # 全角記号（日本語コメント/文字列で多用するため無効化）
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "PLR2004"] # assert・テスト用ダミー値を許可
+"app/infra/db/migrations/**" = ["E501"]          # 自動生成マイグレーション
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+# ---------------------------------------------------------------------------
+# mypy — 型検査（domain/services/infra は strict。コーディング規約 §1）
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = "."
+
+[[tool.mypy.overrides]]
+# api/templates 周りは個別緩和（理由: FastAPIデコレータ・Jinja2は動的で strict と相性が悪い）
+module = ["app.api.*"]
+disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
+# 外部SDKの型スタブ欠如。infra境界でのみ untyped import を許容（規約 §2）
+module = ["fastembed.*", "sudachipy.*", "aioboto3.*", "weasyprint.*", "pgvector.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "integration: compose上の実PostgreSQL/LocalStackを使うテスト（コーディング規約 §6）",
+]
+addopts = "-ra --strict-markers"
+
+# ---------------------------------------------------------------------------
+# import-linter — レイヤ依存方向の機械検査（アーキテクチャ規約 §2）
+# ---------------------------------------------------------------------------
+[tool.importlinter]
+root_package = "app"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "依存は内向きのみ（api/worker → services → domain）"
+type = "layers"
+layers = [
+    "app.api | app.worker",
+    "app.services",
+    "app.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "domain は外部依存ゼロ（SQLAlchemy/anthropic/boto3を禁止）"
+type = "forbidden"
+source_modules = ["app.domain"]
+forbidden_modules = [
+    "sqlalchemy",
+    "anthropic",
+    "boto3",
+    "aioboto3",
+    "fastembed",
+    "fastapi",
+    "app.infra",
+    "app.services",
+    "app.api",
+]
+
+[[tool.importlinter.contracts]]
+name = "services は infra を直接importしない（ポート経由）"
+type = "forbidden"
+source_modules = ["app.services"]
+forbidden_modules = ["app.infra", "app.api"]

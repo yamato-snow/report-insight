@@ -70,12 +70,43 @@ graph LR
 
 ## セットアップ / 実行
 
-（実装完了後に追記：ローカル起動手順・デモデータ投入・デプロイ手順）
+ローカルは Docker Compose で完結する（AWS 実環境なしでフル機能をデモ可能。[開発環境 08](docs/08_dev_setup.md)）。
+
+```bash
+uv sync --all-extras         # 依存インストール（Python 3.12 は uv が取得）
+cp env.example .env          # 既定は LLM_PROVIDER=fake（APIキー不要で全フロー動作）
+make up                      # db(pgvector) / localstack / api / worker / webhook-mock を起動
+make migrate                 # Alembic マイグレーション適用
+make demo                    # 合成報告書100件を S3(LocalStack)投入 → SQS → worker 構造化 → DB 保存
+open http://localhost:8000/healthz
+```
+
+> **env ファイル名について:** 設計文書 08 は `.env.example` を指すが、本実装環境の保護ガードによりドット無しの
+> `env.example` で提供している（`cp env.example .env`）。中身・用途は同一。
+
+テスト・静的検査:
+
+```bash
+make test              # unit（Fakeポートのみ・外部I/Oゼロ・高速）
+make test-integration  # integration（testcontainers で pgvector 起動・実DB）
+make lint              # ruff + mypy(strict) + import-linter（レイヤ依存の機械検査）
+```
+
+`ANTHROPIC_API_KEY` を設定し `LLM_PROVIDER=anthropic` にすると実 LLM・fastembed(e5-large) に切り替わる
+（既定の fake では埋め込みも決定的なスタブを使い、完全オフラインで動作）。
 
 ## ステータス
 
 - [x] 要件定義・基本設計・ADR
-- [ ] 実装（取込パイプライン / RAG検索 / 月次生成 / 管理画面）
-- [ ] LLM評価データセット・回帰評価
-- [ ] Terraform / CI/CD
-- [ ] デモ動画
+- [x] **P0: 足場**（pyproject/uv・Docker Compose・Alembic 全テーブル・core/domain/services・CI骨格）
+- [x] **P0: F-1 取込パイプライン**（PIIマスキング → 分類(structured output) → confidence閾値 → needs_review → 緊急度高 Webhook通知 → 冪等UPSERT）
+- [x] **P0: F-2 RAG検索**（埋め込み → ハイブリッド検索(認可フィルタ込み) → SSE(sources→token→done) → 引用実在検証 → 0件ショートサーキット）
+- [ ] P1: F-3 月次報告書（集計→文章化→承認→PDF）/ F-4 管理画面（一覧・フィルタ・未分類キュー・承認）
+- [ ] P1: LLM評価データセット・回帰評価ハーネス（実API）
+- [ ] P1: Terraform（modules 5種 + envs/dev）/ GitHub Actions セキュリティゲート仕上げ / runbook
+- [ ] P2: AWS dev への apply・デモ動画
+
+### テスト状況（P0 時点）
+
+- unit 15件 / integration 10件 green（`make test` / `make test-integration`）
+- `make lint`（ruff + mypy strict + import-linter 3契約）green

@@ -1,0 +1,59 @@
+# CI 骨格（P0）。静的検査 + テスト。
+# 完全なセキュリティゲート（gitleaks/bandit/pip-audit/Trivy/SBOM）・LLM回帰評価・main デプロイは
+# P1 夕方②で 09_cicd_devsecops.md §1-2 に沿って仕上げる。
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.8.8"
+      - run: uv sync --all-extras
+      - name: ruff (lint + format)
+        run: |
+          uv run ruff check app tests scripts tools
+          uv run ruff format --check app tests scripts tools
+      - name: mypy
+        run: uv run mypy app
+      - name: import-linter（レイヤ依存方向の検査）
+        run: uv run lint-imports
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: report_insight
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d report_insight"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql+asyncpg://app:app@localhost:5432/report_insight
+      LLM_PROVIDER: fake
+      AWS_ENDPOINT_URL: http://localhost:4566
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.8.8"
+      - run: uv sync --all-extras
+      - name: unit テスト
+        run: uv run pytest tests/unit -q
+      # integration（testcontainers/LocalStack）は P1 で CI に追加する
