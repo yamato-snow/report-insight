@@ -1,7 +1,7 @@
 ---
 date: 2026-07-17
 model: fable
-status: draft
+status: approved
 issue: ""
 topic: report-insight 1日実装計画
 ---
