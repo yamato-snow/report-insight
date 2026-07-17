@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.error_handlers import register_error_handlers
-from app.api.routers import health, search
+from app.api.routers import health, search, ui
 from app.core.config import get_settings
 from app.core.di import build_container
 from app.core.logging import configure_logging
@@ -31,6 +31,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Report Insight", version="0.1.0", lifespan=lifespan)
     register_error_handlers(app)
     app.include_router(health.router)
+    app.include_router(ui.router)
     app.include_router(search.router, prefix=API_PREFIX)
     return app
 

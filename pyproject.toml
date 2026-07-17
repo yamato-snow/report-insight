@@ -74,6 +74,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105", "S106", "PLR2004"] # assert・テスト用ダミー値を許可
 "app/infra/db/migrations/**" = ["E501"]          # 自動生成マイグレーション
+"app/api/routers/ui.py" = ["E501"]               # 埋め込みHTML/JS文字列
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
