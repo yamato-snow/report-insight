@@ -21,6 +21,7 @@ AIソリューション受託案件（バックエンド）応募用ポートフ
 - [アーキテクチャ規約](../06_architecture.md)（**ディレクトリ構造・依存ルールはこれが正**。import-linter で機械検査）
 - [コーディング規約](../07_coding_standards.md) / [開発環境セットアップ](../08_dev_setup.md)（compose 構成・env・Make ターゲットはここで確定済み）
 - [CI/CD・DevSecOps設計](../09_cicd_devsecops.md)（CIのゲート構成はこれが正）/ [テスト計画書](../10_test_plan.md)（テストレベル定義・トレーサビリティ・出口基準）
+- [IaC戦略](../11_iac_strategy.md)（terraform/ の構成・命名タグ規約・tfvars分離・シークレット非保持はこれが正）/ [ADR-004](../adr/ADR-004-iac-tool.md)
 
 ### 実装レベルの確定事項（ドリフト防止のためここで固定）
 

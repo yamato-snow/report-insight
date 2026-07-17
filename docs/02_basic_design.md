@@ -161,6 +161,7 @@ terraform/
 
 - ステート管理：S3 バックエンド + DynamoDB ロック
 - dev はコスト優先（RDS 単一AZ・Fargate Spot）、prod 構成は tfvars 差分のみで表現
+- **ツール選定の根拠は[ADR-004](adr/ADR-004-iac-tool.md)、ステート管理・CI統合・ドリフト検知・ガードレールの詳細は[IaC戦略](11_iac_strategy.md)が正**
 
 ## 6. CI/CD（GitHub Actions）
 

@@ -55,6 +55,7 @@ graph LR
 | [開発環境セットアップ](docs/08_dev_setup.md) | Docker Compose（LocalStack含む）・Make ターゲット・環境変数 |
 | [CI/CD・DevSecOps設計](docs/09_cicd_devsecops.md) | セキュリティゲート（SAST/SCA/IaC/イメージスキャン）・OIDC・デプロイ/ロールバック戦略 |
 | [テスト計画書](docs/10_test_plan.md) | テストピラミッド・要件トレーサビリティ・非機能テスト・出口基準 |
+| [IaC戦略](docs/11_iac_strategy.md) | Terraform構成・ステート管理・plan差分レビュー運用・ドリフト検知 |
 | [ADR](docs/adr/) | 技術選定の意思決定記録 |
 
 ## このポートフォリオが証明すること
