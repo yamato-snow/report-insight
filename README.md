@@ -50,6 +50,9 @@ graph LR
 | [API設計書](docs/03_api_design.md) | エンドポイント仕様・認証・エラー設計 |
 | [DB設計書](docs/04_db_design.md) | ER図・DDL・ベクトル検索インデックス戦略 |
 | [LLM設計書](docs/05_llm_design.md) | プロンプト設計・評価データセット・コスト試算・ハルシネーション対策 |
+| [アーキテクチャ規約](docs/06_architecture.md) | 軽量クリーンアーキテクチャ・依存ルール・ポート設計 |
+| [コーディング規約](docs/07_coding_standards.md) | ruff/mypy/import-linter による機械的強制・テスト/Git規約 |
+| [開発環境セットアップ](docs/08_dev_setup.md) | Docker Compose（LocalStack含む）・Make ターゲット・環境変数 |
 | [ADR](docs/adr/) | 技術選定の意思決定記録 |
 
 ## このポートフォリオが証明すること

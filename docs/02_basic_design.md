@@ -175,20 +175,13 @@ graph LR
 
 ## 7. アプリケーション構成
 
-```
-app/
-├── api/              # ルーター（reports / search / monthly_reports / auth）
-├── core/             # 設定・DB接続・認証・ロギング
-├── domain/           # エンティティ・ドメインロジック（LLM非依存）
-├── services/         # ユースケース（構造化・検索・報告書生成）
-├── llm/              # Claude クライアント・プロンプト・マスキング・評価
-│   └── prompts/      # プロンプトはコードから分離しバージョン管理
-├── worker/           # SQS コンシューマ
-└── templates/        # Jinja2（管理画面）
-tests/
-├── unit/
-├── integration/      # testcontainers で PostgreSQL 実物を使用
-└── llm_eval/         # 評価データセット + 回帰評価ハーネス
-```
+軽量クリーンアーキテクチャを採用する。依存方向は `api/worker → services → domain`、外部I/O（DB・LLM・AWS・通知）はポート（Protocol）の背後の `infra/` に隔離し、テストでは Fake・評価では実APIを使い分ける。
 
-依存方向：`api/worker → services → domain`。LLM 呼び出しは `llm/` に隔離し、テストではモック・評価では実APIを使い分ける。
+**ディレクトリ構造・依存ルール・ポート定義の詳細は[アーキテクチャ規約](06_architecture.md)が正**。コーディング規約は[07_coding_standards.md](07_coding_standards.md)、ローカル開発環境（Docker Compose）は[08_dev_setup.md](08_dev_setup.md) を参照。
+
+```
+tests/
+├── unit/             # domain / services（Fakeポートのみ・外部I/Oゼロ）
+├── integration/      # compose 上の実 PostgreSQL・LocalStack を使用
+└── llm_eval/         # 評価データセット + 回帰評価ハーネス（実API）
+```
