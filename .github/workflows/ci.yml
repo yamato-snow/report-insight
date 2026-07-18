@@ -188,7 +188,7 @@ jobs:
       - name: Trivy config スキャン（非暗号化RDS・公開S3・全開放SG 等の CRITICAL をブロック。設計 §2）
         # 公開ALB(80/443の0.0.0.0/0)は意図した構成のため .trivyignore で明示除外する。
         # HTTP専用リスナ等の HIGH は本番TLS(ACM)導入(P2)で解消するため現時点は非ブロック。
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.30.0
         with:
           scan-type: config
           scan-ref: terraform
@@ -212,7 +212,7 @@ jobs:
           load: true
           tags: report-insight:${{ github.sha }}
       - name: Trivy（image スキャン。ベースイメージの Critical CVE で失敗）
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.30.0
         with:
           scan-type: image
           image-ref: report-insight:${{ github.sha }}
