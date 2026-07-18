@@ -28,7 +28,9 @@ services:
       POSTGRES_PASSWORD: app
       POSTGRES_DB: report_insight
     ports:
-      - "5432:5432"
+      # ホストのネイティブ postgres が 5432 を占有するため 5433 で公開（内部は db:5432 のまま）。
+      # ホスト実行の make eval 用。native pg を使うなら元の "5432:5432" に戻してよい。
+      - "5433:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
