@@ -4,6 +4,9 @@
 DB（pgvector）が必要。`make up && make migrate` 済みの状態で実行する。
 provider=fake でもスモーク実行できるが、忠実性(judge)は実APIが必要なためスキップする。
 
+ローカル実行手順・ホストのネイティブ PostgreSQL(5432) 衝突時の回避は Runbook §8 を参照。
+CI では `llm-eval` environment の `ANTHROPIC_API_KEY` secret を用いて回帰実行する。
+
 出力: 標準出力にサマリ、`tests/llm_eval/last_result.json` に機械可読な結果。
 合否は終了コードで返す（CI/README 記録用）。
 """
