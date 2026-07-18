@@ -27,3 +27,4 @@ __pycache__/
 # Local
 *.log
 tmp/
+tests/llm_eval/last_result.json
