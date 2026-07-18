@@ -16,6 +16,7 @@ from app.domain.entities import (
     Property,
     Report,
     ReportAnalysis,
+    ReportListFilters,
     SearchFilters,
     SearchHit,
     User,
@@ -158,6 +159,61 @@ class SqlReportRepository:
         analysis.status = AnalysisStatus.HUMAN_VERIFIED.value
         await self._session.flush()
         return analysis_to_domain(analysis)
+
+    async def list_reports(
+        self,
+        filters: ReportListFilters,
+        permitted_property_ids: Sequence[int],
+        cursor: int | None,
+        limit: int,
+    ) -> list[Report]:
+        if not permitted_property_ids:
+            return []
+        conditions: list[ColumnElement[bool]] = [
+            models.Report.property_id.in_(list(permitted_property_ids)),
+        ]
+        if filters.property_id is not None:
+            conditions.append(models.Report.property_id == filters.property_id)
+        if filters.category is not None:
+            conditions.append(models.ReportAnalysis.category == filters.category.value)
+        if filters.urgency is not None:
+            conditions.append(models.ReportAnalysis.urgency == filters.urgency.value)
+        if filters.status is not None:
+            conditions.append(models.ReportAnalysis.status == filters.status.value)
+        if cursor is not None:
+            conditions.append(models.Report.id < cursor)
+        return await self._list_with_analysis(conditions, limit)
+
+    async def review_queue(
+        self,
+        permitted_property_ids: Sequence[int],
+        cursor: int | None,
+        limit: int,
+    ) -> list[Report]:
+        if not permitted_property_ids:
+            return []
+        conditions: list[ColumnElement[bool]] = [
+            models.Report.property_id.in_(list(permitted_property_ids)),
+            models.ReportAnalysis.status == AnalysisStatus.NEEDS_REVIEW.value,
+        ]
+        if cursor is not None:
+            conditions.append(models.Report.id < cursor)
+        return await self._list_with_analysis(conditions, limit)
+
+    async def _list_with_analysis(
+        self, conditions: Sequence[ColumnElement[bool]], limit: int
+    ) -> list[Report]:
+        # analysis を条件に含めるため inner join。id 降順で安定したカーソルページング。
+        stmt = (
+            select(models.Report)
+            .join(models.ReportAnalysis, models.ReportAnalysis.report_id == models.Report.id)
+            .options(selectinload(models.Report.analysis))
+            .where(and_(*conditions))
+            .order_by(models.Report.id.desc())
+            .limit(limit)
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [report_to_domain(row) for row in rows]
 
 
 class SqlSearchRepository:

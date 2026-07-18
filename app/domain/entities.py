@@ -130,6 +130,15 @@ class SearchFilters(BaseModel):
     to: datetime | None = None
 
 
+class ReportListFilters(BaseModel):
+    """管理画面の一覧フィルタ（API設計書 F-4: GET /reports）。"""
+
+    property_id: int | None = None
+    category: Category | None = None
+    urgency: Urgency | None = None
+    status: AnalysisStatus | None = None
+
+
 class MaskingResult(BaseModel):
     """PIIマスキング結果。mapping は復元用でDB内のみ保持（LLM設計書 §3）。"""
 

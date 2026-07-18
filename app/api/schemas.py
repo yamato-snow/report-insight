@@ -7,8 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.domain.entities import MonthlyReport, SearchFilters
-from app.domain.values import Category
+from app.domain.entities import MonthlyReport, Property, Report, SearchFilters
+from app.domain.values import Category, Urgency
 
 
 class SearchFiltersIn(BaseModel):
@@ -29,6 +29,76 @@ class SearchFiltersIn(BaseModel):
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=1000)
     filters: SearchFiltersIn = Field(default_factory=SearchFiltersIn)
+
+
+class PropertyOut(BaseModel):
+    id: int
+    branch_id: int
+    name: str
+    address: str | None = None
+
+    @classmethod
+    def from_domain(cls, prop: Property) -> PropertyOut:
+        return cls(id=prop.id, branch_id=prop.branch_id, name=prop.name, address=prop.address)
+
+
+class ReportAnalysisOut(BaseModel):
+    category: str
+    urgency: str
+    action_required: bool
+    normalized_summary: str
+    confidence: float
+    status: str
+
+
+class ReportOut(BaseModel):
+    """報告書の一覧/詳細表現（管理画面 API）。"""
+
+    id: int
+    property_id: int
+    reported_at: datetime
+    reporter_role: str
+    raw_text: str
+    analysis: ReportAnalysisOut | None = None
+
+    @classmethod
+    def from_domain(cls, report: Report) -> ReportOut:
+        if report.id is None:
+            raise ValueError("永続化されていない報告書は表現できません")
+        analysis = None
+        if report.analysis is not None:
+            a = report.analysis
+            analysis = ReportAnalysisOut(
+                category=a.category.value,
+                urgency=a.urgency.value,
+                action_required=a.action_required,
+                normalized_summary=a.normalized_summary,
+                confidence=a.confidence,
+                status=a.status.value,
+            )
+        return cls(
+            id=report.id,
+            property_id=report.property_id,
+            reported_at=report.reported_at,
+            reporter_role=report.reporter_role,
+            raw_text=report.raw_text,
+            analysis=analysis,
+        )
+
+
+class ReportListOut(BaseModel):
+    """一覧レスポンス（カーソルページング）。"""
+
+    items: list[ReportOut]
+    next_cursor: int | None = None
+
+
+class AnalysisOverrideIn(BaseModel):
+    """人手による分類確定（PATCH /reports/{id}/analysis）。"""
+
+    category: Category
+    urgency: Urgency
+    action_required: bool
 
 
 class MonthlyReportCreate(BaseModel):

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report Insight — 管理画面</title>
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif;
+         margin: 0; padding: 24px; max-width: 1100px; margin-inline: auto; line-height: 1.6; }
+  h1 { font-size: 1.25rem; margin: 0 0 4px; }
+  .sub { color: #888; font-size: .85rem; margin: 0 0 20px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+  label { font-size: .75rem; color: #888; display: block; margin-bottom: 2px; }
+  select, input { padding: 6px 8px; border: 1px solid #8886; border-radius: 6px;
+    background: transparent; color: inherit; font-size: .9rem; }
+  button { padding: 7px 14px; border: 0; border-radius: 6px; cursor: pointer;
+    background: #2563eb; color: #fff; font-size: .9rem; }
+  .tabs { margin: 18px 0 10px; display: flex; gap: 8px; }
+  .tabs button { background: #6b7280; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: .85rem; }
+  th, td { border-bottom: 1px solid #8883; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { color: #888; font-weight: 600; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem; }
+  .u-high { background: #dc2626; color: #fff; }
+  .u-medium { background: #d97706; color: #fff; }
+  .u-low { background: #4b5563; color: #fff; }
+  .s-needs_review { color: #dc2626; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>Report Insight — 管理画面</h1>
+  <p class="sub">利用者: {{ user.email }}（{{ user.role }}） / 権限内の物件のみ表示されます。</p>
+
+  <form class="row" hx-get="/admin/reports?uid={{ uid }}" hx-target="#reports" hx-swap="innerHTML">
+    <div>
+      <label>物件</label>
+      <select name="property_id">
+        <option value="">すべて</option>
+        {% for p in properties %}
+        <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>分類</label>
+      <select name="category">
+        <option value="">すべて</option>
+        {% for c in categories %}<option value="{{ c.value }}">{{ c.value }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>緊急度</label>
+      <select name="urgency">
+        <option value="">すべて</option>
+        {% for u in urgencies %}<option value="{{ u.value }}">{{ u.value }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>状態</label>
+      <select name="status">
+        <option value="">すべて</option>
+        {% for s in statuses %}<option value="{{ s.value }}">{{ s.value }}</option>{% endfor %}
+      </select>
+    </div>
+    <button type="submit">絞り込み</button>
+  </form>
+
+  <div class="tabs">
+    <button hx-get="/admin/reports?uid={{ uid }}" hx-target="#reports" hx-swap="innerHTML">一覧</button>
+    <button hx-get="/admin/reports?uid={{ uid }}&queue=true" hx-target="#reports" hx-swap="innerHTML">未分類キュー</button>
+  </div>
+
+  <div id="reports" hx-get="/admin/reports?uid={{ uid }}" hx-trigger="load" hx-swap="innerHTML">
+    読み込み中…
+  </div>
+</body>
+</html>

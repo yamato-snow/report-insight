@@ -1,0 +1,29 @@
+{# HTMX 部分テンプレート: 報告書テーブル。全テキストは自動エスケープ（XSS対策）。 #}
+{% if not reports %}
+<p style="color:#888">該当する報告書はありません。</p>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th><th>物件</th><th>報告日時</th><th>分類</th><th>緊急度</th><th>状態</th><th>要約</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in reports %}
+    <tr>
+      <td>{{ r.id }}</td>
+      <td>{{ r.property_id }}</td>
+      <td>{{ r.reported_at.strftime("%Y-%m-%d %H:%M") }}</td>
+      {% if r.analysis %}
+      <td>{{ r.analysis.category.value }}</td>
+      <td><span class="badge u-{{ r.analysis.urgency.value }}">{{ r.analysis.urgency.value }}</span></td>
+      <td class="s-{{ r.analysis.status.value }}">{{ r.analysis.status.value }}</td>
+      <td>{{ r.analysis.normalized_summary }}</td>
+      {% else %}
+      <td>-</td><td>-</td><td>-</td><td>-</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

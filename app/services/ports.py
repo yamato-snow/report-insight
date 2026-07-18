@@ -17,8 +17,10 @@ from app.domain.entities import (
     MonthlyNarration,
     MonthlyReport,
     MonthlyStats,
+    Property,
     Report,
     ReportAnalysis,
+    ReportListFilters,
     SearchFilters,
     SearchHit,
     User,
@@ -105,6 +107,33 @@ class ReportRepository(Protocol):
         permitted_property_ids: Sequence[int],
     ) -> ReportAnalysis:
         """人間による分類修正・確定（status=human_verified）。"""
+        ...
+
+    async def list_reports(
+        self,
+        filters: ReportListFilters,
+        permitted_property_ids: Sequence[int],
+        cursor: int | None,
+        limit: int,
+    ) -> list[Report]:
+        """権限内の報告書一覧（id 降順・カーソルページング）。認可はSQLで強制。"""
+        ...
+
+    async def review_queue(
+        self,
+        permitted_property_ids: Sequence[int],
+        cursor: int | None,
+        limit: int,
+    ) -> list[Report]:
+        """未分類（needs_review）キュー（id 降順・カーソルページング）。"""
+        ...
+
+
+class PropertyLister(Protocol):
+    """権限内の物件一覧（管理画面のフィルタ選択肢。基本設計 §3）。"""
+
+    async def list_properties(self, user: User) -> list[Property]:
+        """qa は全件、支店管理者は自支店のみ。"""
         ...
 
 

@@ -29,9 +29,11 @@ from app.infra.llm.fake_client import FakeLLMClient
 from app.infra.masking.pii import PIIMasker
 from app.infra.notify.slack import SlackNotifier
 from app.infra.pdf.renderer import WeasyPrintPdfRenderer
+from app.services.admin import AdminService
 from app.services.ingest import IngestService
 from app.services.monthly import MonthlyService
 from app.services.ports import (
+    AuditPort,
     EmbeddingClient,
     LLMClient,
     NotificationPort,
@@ -82,6 +84,17 @@ class Container:
             audit=SqlAuditRepository(session),
             permissions=SqlSearchRepository(session),
         )
+
+    def admin_service(self, session: AsyncSession) -> AdminService:
+        return AdminService(
+            reports=SqlReportRepository(session),
+            properties=SqlUserRepository(session),
+            audit=SqlAuditRepository(session),
+            permissions=SqlSearchRepository(session),
+        )
+
+    def audit_repository(self, session: AsyncSession) -> AuditPort:
+        return SqlAuditRepository(session)
 
     def user_repository(self, session: AsyncSession) -> SqlUserRepository:
         return SqlUserRepository(session)
