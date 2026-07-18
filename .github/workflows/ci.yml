@@ -164,6 +164,13 @@ jobs:
         with:
           version: "0.8.8"
       - run: uv sync --all-extras
+      - name: ANTHROPIC_API_KEY の存在確認（早期・明快に失敗させる）
+        run: |
+          if [ -z "${ANTHROPIC_API_KEY}" ]; then
+            echo "::error::ANTHROPIC_API_KEY が空です。llm-eval environment の secret 設定を確認してください。"
+            exit 1
+          fi
+          echo "ANTHROPIC_API_KEY: set (length=${#ANTHROPIC_API_KEY})"
       - name: DB マイグレーション
         run: uv run alembic upgrade head
       - name: LLM 回帰評価（prompts/ 変更時のみ・実API・要 ANTHROPIC_API_KEY）
