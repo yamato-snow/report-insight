@@ -159,3 +159,42 @@ aws sqs list-message-move-tasks --source-arn "$DLQ_ARN"
 2. データ不整合・情報漏えいの疑い（他支店データ混入等）は即時エスカレーションし、
    `audit_logs`（検索・承認・分類上書き）と CloudWatch Logs を保全する。
 3. 対応内容・タイムライン・恒久対策を障害記録として残す（次回の Runbook 改善に反映）。
+
+---
+
+## 8. LLM 評価ハーネスのローカル実走（`make eval`）
+
+実 LLM での回帰評価（分類 / 検索 / 忠実性）をローカルで走らせる手順と、詰まりやすい点。
+受け入れ基準は [LLM設計書](05_llm_design.md) §4。CI では `prompts/` または `tests/llm_eval/**`
+変更時に `llm-regression` ジョブが同じ `make eval` を実行する（要 `llm-eval` environment の
+`ANTHROPIC_API_KEY` secret）。
+
+### 8-1. 実行
+
+```bash
+# .env で LLM_PROVIDER=anthropic + ANTHROPIC_API_KEY を設定し、DB を起動しておく
+make up && make migrate
+make eval   # 実API・課金あり。結果は tests/llm_eval/last_result.json、終了コードで合否
+```
+
+### 8-2. ホストに 5432 を使う PostgreSQL がある場合
+
+`make eval` はホスト側で動くため、`.env` の `DATABASE_URL` がコンテナ内部名 `db:5432` を指すと
+ホストから名前解決できない。さらにローカルにネイティブ PostgreSQL が 5432 を占有していると、
+コンテナ DB が隠れて `password authentication failed for user "app"` になる。db の公開ポートを
+避けて上書き実行する：
+
+```bash
+DATABASE_URL="postgresql+asyncpg://app:app@localhost:5433/report_insight" \
+SLACK_WEBHOOK_URL="http://localhost:9000/webhook" \
+make eval
+```
+
+`compose.yaml` の db は `5433:5432` で公開しているため、ネイティブ pg と衝突しない
+（内部の `db:5432` は不変なので api/worker には無影響）。
+
+### 8-3. 既知の挙動
+
+- 初回は埋め込みモデル `multilingual-e5-large`（約 2.25GB）を HuggingFace から取得（以降キャッシュ）。
+- 検索コーパスは冪等に ingest される（既存 DB へ再実行しても `source_key` から対応表を再構築）。
+- 忠実性は LLM-as-judge（1..5・閾値 4.0）。解析不能な応答は 0 点にせず平均から除外する。
