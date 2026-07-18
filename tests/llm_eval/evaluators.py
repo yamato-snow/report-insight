@@ -24,7 +24,7 @@ from tests.llm_eval.metrics import (
 _CITATION_RE = re.compile(r"\[report:(\d+)\]")
 
 # judge: (question, answer, grounded_fact) -> 1..5 のスコア（実APIで実装して注入）
-JudgeFn = Callable[[str, str, str], Awaitable[float]]
+JudgeFn = Callable[[str, str, str], Awaitable[float | None]]
 
 
 async def eval_classification(
@@ -116,11 +116,14 @@ async def eval_faithfulness(
         async for token in stream:
             parts.append(token)
         answer = "".join(parts)
-        scores.append(await judge(case.question, answer, case.grounded_fact))
-    total = len(cases)
+        score = await judge(case.question, answer, case.grounded_fact)
+        if score is None:  # judge がパースできなかったケースは平均から除外（0.0 汚染を防ぐ）
+            continue
+        scores.append(score)
+    valid = len(scores)
     return FaithfulnessReport(
-        total=total,
-        mean_score=sum(scores) / total if total else 0.0,
+        total=valid,
+        mean_score=sum(scores) / valid if valid else 0.0,
     )
 
 

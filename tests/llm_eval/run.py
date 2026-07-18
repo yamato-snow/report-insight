@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from anthropic import AsyncAnthropic
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.config import LLMProvider, get_settings
@@ -78,7 +79,6 @@ async def _ingest_search_corpus(container) -> dict[str, int]:  # type: ignore[no
         ).encode("utf-8")
     storage = FakeStorage(objects)
 
-    mapping: dict[str, int] = {}
     for case in cases:
         async with unit_of_work(container.session_factory) as session:
             service = IngestService(
@@ -90,34 +90,58 @@ async def _ingest_search_corpus(container) -> dict[str, int]:  # type: ignore[no
                 notifier=container.notifier,
                 confidence_threshold=container.settings.confidence_threshold,
             )
-            outcome = await service.ingest_from_key(case.doc_id)
-        if outcome.report_id is not None:
-            mapping[case.doc_id] = outcome.report_id
-    return mapping
+            await service.ingest_from_key(case.doc_id)
+
+    # doc_id→report_id は DB から権威的に構築する。ingest が duplicate（既存）を返しても
+    # source_key から既存 id を引けるため、DB をリセットせず再実行しても壊れない（冪等）。
+    async with container.session_factory() as session:
+        rows = await session.execute(
+            select(models.Report.source_key, models.Report.id).where(
+                models.Report.source_key.in_([case.doc_id for case in cases])
+            )
+        )
+    return {source_key: report_id for source_key, report_id in rows.all()}
+
+
+_FULLWIDTH_DIGITS = str.maketrans("０１２３４５６７８９", "0123456789")
+
+
+def _parse_score(text: str) -> float | None:
+    """応答から最初の 1..5 の数字を取り出す（全角も許容）。拾えなければ None。"""
+    for ch in text.translate(_FULLWIDTH_DIGITS):
+        if ch in "12345":
+            return float(ch)
+    return None
 
 
 def _make_judge(settings):  # type: ignore[no-untyped-def]
-    """実APIの LLM-as-judge（1..5）。忠実性採点に使う。"""
+    """実APIの LLM-as-judge（1..5）。パース失敗時は None を返し、平均から除外する。"""
     client = AsyncAnthropic(api_key=settings.anthropic_api_key)
 
-    async def judge(question: str, answer: str, grounded_fact: str) -> float:
+    async def judge(question: str, answer: str, grounded_fact: str) -> float | None:
         system = (
             "あなたは回答の忠実性を採点する審査員です。"
-            "回答が根拠事実と矛盾せず支持されているかを 1〜5 で評価し、数字のみを出力してください。"
+            "回答が根拠事実と矛盾せず支持されているかを 1〜5 で評価してください。"
             "5=完全に忠実、1=根拠と矛盾または捏造。"
+            "出力は半角数字1文字（1〜5）だけとし、前置き・記号・説明を一切書かないこと。"
         )
         user = f"質問: {question}\n根拠事実: {grounded_fact}\n回答: {answer}\nスコア(1-5):"
-        resp = await client.messages.create(
-            model=settings.model_generate,
-            max_tokens=8,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
-        body = "".join(
-            getattr(b, "text", "") for b in resp.content if getattr(b, "type", None) == "text"
-        )
-        digits = "".join(ch for ch in body if ch.isdigit())
-        return float(digits[0]) if digits else 0.0
+        # 稀に前置きが混じり数字が拾えないことがあるため数回試行する
+        # （temperature は新しめのモデルで非対応のため指定しない）。
+        for _ in range(3):
+            resp = await client.messages.create(
+                model=settings.model_generate,
+                max_tokens=24,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+            body = "".join(
+                getattr(b, "text", "") for b in resp.content if getattr(b, "type", None) == "text"
+            )
+            score = _parse_score(body)
+            if score is not None:
+                return score
+        return None
 
     return judge
 
