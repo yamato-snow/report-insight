@@ -28,3 +28,10 @@ __pycache__/
 *.log
 tmp/
 tests/llm_eval/last_result.json
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfplan
