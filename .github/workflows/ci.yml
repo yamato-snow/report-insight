@@ -1,6 +1,7 @@
-# CI 骨格（P0）。静的検査 + テスト。
-# 完全なセキュリティゲート（gitleaks/bandit/pip-audit/Trivy/SBOM）・LLM回帰評価・main デプロイは
-# P1 夕方②で 09_cicd_devsecops.md §1-2 に沿って仕上げる。
+# CI/CD・DevSecOps パイプライン（設計: docs/09_cicd_devsecops.md §1-2）。
+# PR時: 静的検査 → gitleaks → SAST(bandit) → SCA(pip-audit) → unit → integration →
+#        （prompts/ 変更時のみ）LLM回帰評価 /（terraform/ 変更時のみ）IaCスキャン。
+# main: Docker build → Trivy(image) → SBOM(Syft)。ECR push / デプロイは P2。
 name: ci
 
 on:
@@ -12,7 +13,29 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# 既定は最小権限。OIDC(id-token)が要るジョブでのみ個別に付与する（設計 §3）。
+permissions:
+  contents: read
+
 jobs:
+  # 変更パスに応じて条件付きジョブ（LLM回帰・IaC）を起動するためのフィルタ
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      prompts: ${{ steps.filter.outputs.prompts }}
+      terraform: ${{ steps.filter.outputs.terraform }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            prompts:
+              - 'app/infra/llm/prompts/**'
+              - 'tests/llm_eval/**'
+            terraform:
+              - 'terraform/**'
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -30,7 +53,55 @@ jobs:
       - name: import-linter（レイヤ依存方向の検査）
         run: uv run lint-imports
 
-  test:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks（シークレット混入検出）
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.8.8"
+      - run: uv sync --all-extras
+      - name: bandit（SAST）
+        # ruff の S ルールは lint で常時実行。ここは bandit で二重化（設計 §2）。
+        run: uv run bandit -q -r app -c pyproject.toml
+
+  sca:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.8.8"
+      - run: uv sync --all-extras
+      - name: pip-audit（依存脆弱性 SCA）
+        # 実行時依存の既知CVEを検査。Critical/High は原則ブロック（設計 §2 SLA）。
+        run: uv run pip-audit --strict --progress-spinner off
+
+  unit:
+    runs-on: ubuntu-latest
+    env:
+      LLM_PROVIDER: fake
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.8.8"
+      - run: uv sync --all-extras
+      - name: unit テスト
+        run: uv run pytest tests/unit -q
+
+  integration:
     runs-on: ubuntu-latest
     services:
       db:
@@ -47,13 +118,109 @@ jobs:
     env:
       DATABASE_URL: postgresql+asyncpg://app:app@localhost:5432/report_insight
       LLM_PROVIDER: fake
-      AWS_ENDPOINT_URL: http://localhost:4566
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           version: "0.8.8"
       - run: uv sync --all-extras
-      - name: unit テスト
-        run: uv run pytest tests/unit -q
-      # integration（testcontainers/LocalStack）は P1 で CI に追加する
+      - name: Alembic upgrade→downgrade→upgrade（可逆性検証。DB設計 §3）
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+      - name: integration テスト（testcontainers + pgvector）
+        # conftest が testcontainers で独自の PostgreSQL を起動する（services:db は Alembic 用）。
+        run: uv run pytest -m integration -q
+
+  llm-regression:
+    needs: changes
+    if: needs.changes.outputs.prompts == 'true'
+    runs-on: ubuntu-latest
+    environment: llm-eval
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: report_insight
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d report_insight"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql+asyncpg://app:app@localhost:5432/report_insight
+      LLM_PROVIDER: anthropic
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.8.8"
+      - run: uv sync --all-extras
+      - name: DB マイグレーション
+        run: uv run alembic upgrade head
+      - name: LLM 回帰評価（prompts/ 変更時のみ・実API・要 ANTHROPIC_API_KEY）
+        run: make eval
+
+  iac-scan:
+    needs: changes
+    if: needs.changes.outputs.terraform == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: terraform fmt / validate（dev・prod）
+        run: |
+          terraform -chdir=terraform fmt -check -recursive
+          terraform -chdir=terraform/envs/dev init -backend=false -input=false
+          terraform -chdir=terraform/envs/dev validate
+          terraform -chdir=terraform/envs/prod init -backend=false -input=false
+          terraform -chdir=terraform/envs/prod validate
+      - name: Trivy config スキャン（非暗号化RDS・公開S3・全開放SG 等の CRITICAL をブロック。設計 §2）
+        # 公開ALB(80/443の0.0.0.0/0)は意図した構成のため .trivyignore で明示除外する。
+        # HTTP専用リスナ等の HIGH は本番TLS(ACM)導入(P2)で解消するため現時点は非ブロック。
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: terraform
+          severity: CRITICAL
+          exit-code: "1"
+          trivyignores: terraform/.trivyignore
+
+  # --- main マージ後: イメージのビルド・スキャン・SBOM（ECR push/デプロイは P2） ---
+  build:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [lint, gitleaks, sast, sca, unit, integration]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Docker build（push はしない。ECR push は P2）
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: report-insight:${{ github.sha }}
+      - name: Trivy（image スキャン。ベースイメージの Critical CVE で失敗）
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: report-insight:${{ github.sha }}
+          severity: CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: SBOM 生成（Syft・リリース成果物として添付）
+        uses: anchore/sbom-action@v0
+        with:
+          image: report-insight:${{ github.sha }}
+          format: spdx-json
+          artifact-name: sbom-${{ github.sha }}.spdx.json
+
+  # 注: ECR push → dev デプロイ → スモーク → 手動承認 → prod は P2（設計 §1・§5）。
+  #     AWS 認証は OIDC(id-token: write)・静的キーゼロ（設計 §3）で別ジョブに切り出す。
