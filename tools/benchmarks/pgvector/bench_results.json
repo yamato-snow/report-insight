@@ -1,0 +1,34 @@
+[
+  {
+    "scale": "150k",
+    "hnsw_build_s": 290.6,
+    "index_size": "1172 MB",
+    "table_size": "801 MB",
+    "knn": {
+      "p50_ms": 13.41,
+      "p95_ms": 29.48,
+      "mean_ms": 18.59
+    },
+    "knn_filtered": {
+      "p50_ms": 41.65,
+      "p95_ms": 49.01,
+      "mean_ms": 38.98
+    }
+  },
+  {
+    "scale": "500k",
+    "hnsw_build_s": 1013.4,
+    "index_size": "3906 MB",
+    "table_size": "2670 MB",
+    "knn": {
+      "p50_ms": 29.54,
+      "p95_ms": 36.61,
+      "mean_ms": 30.09
+    },
+    "knn_filtered": {
+      "p50_ms": 250.5,
+      "p95_ms": 283.16,
+      "mean_ms": 232.27
+    }
+  }
+]
