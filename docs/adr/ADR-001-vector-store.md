@@ -35,3 +35,8 @@ RAG検索（F-2）のためにベクトルストアが必要。候補は pgvecto
 
 - ベクトル数が100万を超える、または検索レイテンシ p95 が1秒を超えたら OpenSearch 移行を再検討
 - 移行に備え、検索は `SearchRepository` インターフェースの背後に隔離する
+
+## 追記（2026-07-19）
+
+閾値までの余裕を本システム相当の構成で実測した。50万件・フィルタ併用の最悪ケースでも
+p95 283ms（閾値1秒の約1/3.5）。詳細は [tools/benchmarks/pgvector/](../../tools/benchmarks/pgvector/README.md) を参照。
