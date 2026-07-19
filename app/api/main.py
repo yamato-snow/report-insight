@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 
 from app.api.error_handlers import register_error_handlers
 from app.api.routers import admin_ui, health, monthly, reports, search, ui
@@ -20,7 +20,7 @@ API_PREFIX = "/api/v1"
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings.log_level)
-    app.state.container = build_container(settings)
+    app.state.container = build_container(settings, service="api")
     try:
         yield
     finally:
@@ -29,6 +29,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Report Insight", version="0.1.0", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def _count_server_errors(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """5xx（未処理例外含む）を api_error として送出する（runbook §0 / LLMエラー率の外側）。"""
+        try:
+            response = await call_next(request)
+        except Exception:
+            request.app.state.container.metrics.incr("api_error")
+            raise
+        if response.status_code >= 500:
+            request.app.state.container.metrics.incr("api_error")
+        return response
+
     register_error_handlers(app)
     app.include_router(health.router)
     app.include_router(ui.router)

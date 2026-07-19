@@ -18,7 +18,7 @@ from app.infra.embedding.fake_client import FakeEmbeddingClient
 from app.infra.llm.fake_client import FakeLLMClient
 from app.infra.notify.slack import SlackNotifier
 from app.services.ingest import IngestService
-from tests.unit.fakes import FakeMasker, FakeStorage
+from tests.unit.fakes import FakeMasker, FakeMetrics, FakeStorage
 
 pytestmark = pytest.mark.integration
 
@@ -46,6 +46,7 @@ def _service(storage: FakeStorage, session: AsyncSession, notifier: SlackNotifie
         embedder=FakeEmbeddingClient(dim=1024),
         repository=SqlReportRepository(session),
         notifier=notifier,
+        metrics=FakeMetrics(),
         confidence_threshold=0.85,
     )
 

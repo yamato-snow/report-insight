@@ -13,16 +13,19 @@ from app.services.search import (
     SourcesEvent,
     TokenEvent,
 )
-from tests.unit.fakes import CitingFakeLLM, FakeSearchRepository, make_hit
+from tests.unit.fakes import CitingFakeLLM, FakeMetrics, FakeSearchRepository, make_hit
 
 _USER = User(id=1, email="m@example.com", role=Role.BRANCH_MANAGER, branch_id=1)
 
 
-def _service(repo: FakeSearchRepository, llm=None) -> SearchService:
+def _service(
+    repo: FakeSearchRepository, llm=None, metrics: FakeMetrics | None = None
+) -> SearchService:
     return SearchService(
         llm=llm or FakeLLMClient(),
         embedder=FakeEmbeddingClient(dim=64),
         repository=repo,
+        metrics=metrics or FakeMetrics(),
     )
 
 
@@ -71,3 +74,23 @@ async def test_search_done_reports_token_usage() -> None:
     assert isinstance(done, DoneEvent)
     assert done.input_tokens > 0
     assert done.output_tokens > 0
+
+
+async def test_search_no_results_emits_shortcircuit_metric() -> None:
+    metrics = FakeMetrics()
+
+    await _collect(_service(FakeSearchRepository(hits=[]), metrics=metrics))
+
+    assert metrics.counts.get("search_total") == 1
+    assert metrics.counts.get("search_no_results") == 1
+    assert metrics.tokens == []
+
+
+async def test_search_hit_emits_tokens_and_no_shortcircuit() -> None:
+    metrics = FakeMetrics()
+
+    await _collect(_service(FakeSearchRepository(hits=[make_hit(1)]), metrics=metrics))
+
+    assert metrics.counts.get("search_total") == 1
+    assert "search_no_results" not in metrics.counts
+    assert len(metrics.tokens) == 1

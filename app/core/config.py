@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     # --- 実行 ---
     log_level: str = Field(default="INFO")
 
+    # --- 観測（EMF メトリクス） ---
+    # env は CloudWatch ディメンション（dev/prod）。ECS からは RI_ENV で注入する。
+    env: str = Field(default="local", validation_alias="RI_ENV")
+    metrics_namespace: str = "ReportInsight"
+
 
 @lru_cache
 def get_settings() -> Settings:

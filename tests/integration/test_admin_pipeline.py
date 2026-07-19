@@ -19,7 +19,7 @@ from app.infra.db.repositories import SqlReportRepository
 from app.infra.embedding.fake_client import FakeEmbeddingClient
 from app.infra.llm.fake_client import FakeLLMClient
 from app.services.ingest import IngestService
-from tests.unit.fakes import FakeMasker, FakeNotifier, FakeStorage
+from tests.unit.fakes import FakeMasker, FakeMetrics, FakeNotifier, FakeStorage
 
 pytestmark = pytest.mark.integration
 
@@ -50,6 +50,7 @@ async def _ingest(
                 embedder=FakeEmbeddingClient(dim=1024),
                 repository=SqlReportRepository(session),
                 notifier=FakeNotifier(),
+                metrics=FakeMetrics(),
                 confidence_threshold=0.85,
             )
             await service.ingest_from_key(key)

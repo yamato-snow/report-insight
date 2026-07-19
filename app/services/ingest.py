@@ -15,10 +15,13 @@ from app.domain.entities import (
     Report,
     ReportAnalysis,
 )
+from app.domain.errors import RetryableError
 from app.domain.values import LONG_TEXT_CHARS, AnalysisStatus, Urgency
 from app.services.ports import (
+    NULL_METRICS,
     EmbeddingClient,
     LLMClient,
+    MetricsPort,
     NotificationPort,
     ObjectStoragePort,
     PIIMaskerPort,
@@ -51,6 +54,7 @@ class IngestService:
         repository: ReportRepository,
         notifier: NotificationPort,
         confidence_threshold: float,
+        metrics: MetricsPort = NULL_METRICS,
     ) -> None:
         self._storage = storage
         self._masker = masker
@@ -58,6 +62,7 @@ class IngestService:
         self._embedder = embedder
         self._repo = repository
         self._notifier = notifier
+        self._metrics = metrics
         self._threshold = confidence_threshold
 
     async def ingest_from_key(self, source_key: str) -> IngestOutcome:
@@ -67,12 +72,26 @@ class IngestService:
             source_key: 冪等性キー（S3オブジェクトキー。DB設計書 §2）。
         """
         log = logger.bind(source_key=source_key)
+        self._metrics.incr("ingest_total")
         raw = await self._storage.get_object(source_key)
         message = IngestMessage.model_validate_json(raw)
 
         # PIIマスキング後のテキストのみ LLM API に送る（LLM設計書 §3）
         masked = await self._masker.mask(message.raw_text)
-        envelope = await self._llm.classify_report(masked.masked_text)
+        # LLM 障害（RetryableError）と構造化の失敗（パース/スキーマ不一致）を別カウンタで送出。
+        # 前者は runbook §2（縮退ラダー）、後者は §3（構造化失敗率）の一次対応に対応する。
+        try:
+            envelope = await self._llm.classify_report(masked.masked_text)
+        except RetryableError:
+            self._metrics.incr("llm_error")
+            raise
+        except Exception:
+            self._metrics.incr("structured_failure")
+            raise
+        self._metrics.emit_tokens(
+            input_tokens=envelope.meta.input_tokens,
+            output_tokens=envelope.meta.output_tokens,
+        )
         result = envelope.result
 
         status = (

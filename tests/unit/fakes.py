@@ -156,6 +156,20 @@ class FakePdfRenderer:
         return b"%PDF-1.4 fake\n" + body_markdown.encode("utf-8") + b"\n%%EOF"
 
 
+class FakeMetrics:
+    """メトリクス送出を記録する Fake（MetricsPort。外部I/Oゼロ）。"""
+
+    def __init__(self) -> None:
+        self.counts: dict[str, int] = {}
+        self.tokens: list[tuple[int, int]] = []
+
+    def incr(self, name: str, value: int = 1, **dimensions: str) -> None:
+        self.counts[name] = self.counts.get(name, 0) + value
+
+    def emit_tokens(self, *, input_tokens: int, output_tokens: int, **dimensions: str) -> None:
+        self.tokens.append((input_tokens, output_tokens))
+
+
 class FakeAudit:
     """監査ログの記録を検証するための Fake。"""
 
