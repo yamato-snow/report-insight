@@ -35,6 +35,12 @@ variable "container_port" {
   default     = 8000
 }
 
+variable "enable_interface_endpoints" {
+  description = "ECR/Logs/SQS の Interface エンドポイントを作成するか（prod=true, dev=false）"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "共通タグ"
   type        = map(string)

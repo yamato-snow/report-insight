@@ -27,15 +27,16 @@ resource "aws_secretsmanager_secret" "slack_webhook_url" {
 }
 
 module "network" {
-  source               = "../../modules/network"
-  name_prefix          = local.name_prefix
-  vpc_cidr             = var.vpc_cidr
-  azs                  = var.azs
-  public_subnet_cidrs  = var.public_subnet_cidrs
-  private_subnet_cidrs = var.private_subnet_cidrs
-  single_nat_gateway   = var.single_nat_gateway
-  container_port       = var.container_port
-  tags                 = local.tags
+  source                     = "../../modules/network"
+  name_prefix                = local.name_prefix
+  vpc_cidr                   = var.vpc_cidr
+  azs                        = var.azs
+  public_subnet_cidrs        = var.public_subnet_cidrs
+  private_subnet_cidrs       = var.private_subnet_cidrs
+  single_nat_gateway         = var.single_nat_gateway
+  container_port             = var.container_port
+  enable_interface_endpoints = var.enable_interface_endpoints
+  tags                       = local.tags
 }
 
 module "pipeline" {
