@@ -38,6 +38,11 @@ variable "container_port" {
   default = 8000
 }
 
+variable "enable_interface_endpoints" {
+  type    = bool
+  default = false
+}
+
 variable "image" {
   description = "api/worker 共通のコンテナイメージ（ECR URI:tag）"
   type        = string

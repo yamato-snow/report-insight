@@ -6,11 +6,15 @@
 # Web エンドポイントとして意図した構成。ECS/RDS の SG は SG 参照のみで公開していない。
 AVD-AWS-0107
 
-# AVD-AWS-0104: セキュリティグループの 0.0.0.0/0 アウトバウンド（全開放 egress）。
-# 対象は modules/network の alb / ecs SG。ECS タスク(worker/api)は Anthropic API・S3・
-# Secrets Manager・ECR・CloudWatch Logs 等へ外向き HTTPS が必要（NAT 経由・privateサブネット）。
-# ALB もターゲットへ転送する。いずれもインターネット公開ではなく意図した外向き通信。
-# NOTE(hardening): 将来的に egress を 443(+RDS 5432) 限定 or VPCエンドポイント化して除外解除する。
+# AVD-AWS-0104: セキュリティグループの 0.0.0.0/0 アウトバウンド。
+# 【縮小済み】対象は modules/network の ecs SG に残る唯一の /0 ルール
+# aws_vpc_security_group_egress_rule.ecs_https（tcp/443 のみ）。ECS タスク(worker/api)は
+# 公開エンドポイントの Anthropic API(api.anthropic.com) を呼ぶが、Anthropic 側は固定/公開
+# CIDR を提供しないため egress の宛先を絞れず 0.0.0.0/0:443 が残余として必須。
+# 本ルールは AVD-AWS-0104 が port 非依存で /0 を検出するため解除不可（443 限定でも発火する）。
+# その他はハードニング済み: 全開放(-1)を撤廃・RDS は SG 参照で 5432 限定・ALB egress は
+# ECS SG 参照(container_port)に限定し /0 を排除済み（ALB は本ルール対象外になった）。
+# NOTE: Anthropic を Bedrock(VPC PrivateLink) 等に切替えれば /0 を完全排除でき本除外も解除可能。
 AVD-AWS-0104
 
 # AVD-AWS-0054: ALB リスナが HTTPS でなく HTTP（modules/ecs の aws_lb_listener.http）。
