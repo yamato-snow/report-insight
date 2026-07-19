@@ -78,6 +78,7 @@ module "ecs" {
     AWS_REGION      = var.region
     S3_INBOX_BUCKET = module.pipeline.inbox_bucket
     SQS_QUEUE_URL   = module.pipeline.queue_url
+    RI_ENV          = var.env
   }
   secret_arns = {
     DATABASE_URL      = aws_secretsmanager_secret.database_url.arn
@@ -107,5 +108,6 @@ module "observability" {
   queue_name          = module.pipeline.queue_name
   dlq_name            = module.pipeline.dlq_name
   alarm_email         = var.alarm_email
+  env                 = var.env
   tags                = local.tags
 }

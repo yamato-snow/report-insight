@@ -17,10 +17,10 @@
 |---|---|---|---|
 | `ri-<env>-dlq-not-empty` | 取込が3回失敗し DLQ に滞留 | §1 DLQ 再処理 | 基本設計 §4 |
 | `ri-<env>-queue-backlog` | 取込キューの滞留（消費が追いつかない） | §4 スループット | |
-| 構造化失敗率 > 10%（5分） | 分類/構造化が高頻度で失敗 | §3 構造化失敗 | 基本設計 §4 |
-| LLM API エラー率 > 5% | LLM 障害/レート超過 | §2 LLM 縮退 | ADR-003 |
+| `ri-<env>-structured-failure-rate` | 構造化失敗率 > 10%（5分） | §3 構造化失敗 | 基本設計 §4 |
+| `ri-<env>-llm-error-rate` | LLM API エラー率 > 5% | §2 LLM 縮退 | ADR-003 |
 | `ri-<env>-api-cpu-high` / `-rds-cpu-high` | 負荷過多 | §4 スループット | |
-| 日次トークンコスト > ¥5,000 | コスト先行検知 | §5 コスト | LLM設計 §5 |
+| `ri-<env>-daily-token-cost` | 日次トークンコスト > ¥5,000（概算） | §5 コスト | LLM設計 §5 |
 
 ---
 
@@ -139,6 +139,34 @@ aws sqs list-message-move-tasks --source-arn "$DLQ_ARN"
   （分類 or 生成、特定物件のスパイク等）。
 - 一過性でなければモデル選定・プロンプト長・チャンク設計を見直す。月次予算 ¥100,000 の
   先行指標として扱い、超過が続く場合はエスカレーション。
+
+---
+
+## 5.5 メトリクスの送出元（どの指標をどこで emit しているか）
+
+観測層は **CloudWatch EMF**（Embedded Metric Format）で送出する。アプリは stdout に
+EMF JSON を1行吐くだけで、CloudWatch Logs が自動でカスタムメトリクス化する（boto3 不要）。
+実装は [`app/infra/observability/emf.py`](../app/infra/observability/emf.py) の `EmfMetrics`
+（`MetricsPort` 実装）。名前空間 `ReportInsight`、基底ディメンションは `Env`（dev/prod）と
+`Service`（api/worker）。DI は `core/di.py` の `build_container(settings, service=...)` で注入する。
+
+| メトリクス | 送出元 | ディメンション | 使うアラーム |
+|---|---|---|---|
+| `ingest_total` | `services/ingest.py`（取込1件ごと。失敗率の分母） | Env, Service=worker | 構造化失敗率 / LLMエラー率 |
+| `structured_failure` | `services/ingest.py`（分類のパース/スキーマ失敗 = 非 RetryableError） | Env, Service=worker | `*-structured-failure-rate`（§3・>10%/5分） |
+| `llm_error` | `services/ingest.py`（LLM の一時障害 = RetryableError） | Env, Service=worker | `*-llm-error-rate`（§2・>5%） |
+| `tokens_input` / `tokens_output` | `services/ingest.py`（分類）・`services/search.py`（回答生成） | Env, Service ＋ Env 集計 | `*-daily-token-cost`（§5・>¥5,000/日） |
+| `search_total` / `search_no_results` | `services/search.py`（検索1件ごと・0件短絡） | Env, Service=api | （ダッシュボード用。0件短絡率） |
+| `api_error` | `api/main.py` ミドルウェア（5xx レスポンス・未処理例外） | Env, Service=api | （運用監視用） |
+
+- 失敗の型分け（`ingest.py`）: LLM の API 障害は `RetryableError` として送出され `llm_error`、
+  それ以外の classify 例外（Structured Output のパース/スキーマ不一致）は `structured_failure`
+  にカウントする。前者は §2 の縮退ラダー、後者は §3 の一次対応に対応する。
+- コストアラームは `tokens_*` の **Env のみの集計ストリーム**（`emf.py` が二重ディメンションで送出）を
+  使い、単価（`yen_per_input_token`/`yen_per_output_token`）を掛けた概算円を日次で評価する。
+  正確な請求額ではなく月次予算 ¥100,000 の**先行指標**。
+- ローカル/compose では同じ EMF JSON が stdout に出るだけ（AWS 非依存）。ユニットは
+  [`tests/unit/test_metrics_emf.py`](../tests/unit/test_metrics_emf.py) で形を決定的に検証する。
 
 ---
 

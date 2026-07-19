@@ -28,6 +28,7 @@ from app.infra.llm.anthropic_client import AnthropicLLMClient
 from app.infra.llm.fake_client import FakeLLMClient
 from app.infra.masking.pii import PIIMasker
 from app.infra.notify.slack import SlackNotifier
+from app.infra.observability.emf import EmfMetrics
 from app.infra.pdf.renderer import WeasyPrintPdfRenderer
 from app.services.admin import AdminService
 from app.services.ingest import IngestService
@@ -36,6 +37,7 @@ from app.services.ports import (
     AuditPort,
     EmbeddingClient,
     LLMClient,
+    MetricsPort,
     NotificationPort,
     ObjectStoragePort,
     PdfRendererPort,
@@ -58,6 +60,7 @@ class Container:
     notifier: NotificationPort
     sqs: SqsConsumer
     pdf_renderer: PdfRendererPort
+    metrics: MetricsPort
 
     def ingest_service(self, session: AsyncSession) -> IngestService:
         return IngestService(
@@ -67,6 +70,7 @@ class Container:
             embedder=self.embedder,
             repository=SqlReportRepository(session),
             notifier=self.notifier,
+            metrics=self.metrics,
             confidence_threshold=self.settings.confidence_threshold,
         )
 
@@ -75,6 +79,7 @@ class Container:
             llm=self.llm,
             embedder=self.embedder,
             repository=SqlSearchRepository(session),
+            metrics=self.metrics,
         )
 
     def monthly_service(self, session: AsyncSession) -> MonthlyService:
@@ -121,7 +126,12 @@ def _build_embedder(settings: Settings) -> EmbeddingClient:
     return FakeEmbeddingClient(dim=settings.embedding_dim)
 
 
-def build_container(settings: Settings) -> Container:
+def build_container(settings: Settings, *, service: str = "app") -> Container:
+    """依存を組み立てる。
+
+    Args:
+        service: メトリクスの Service ディメンション（api/worker）。エントリポイントが渡す。
+    """
     engine = create_engine(settings)
     session_factory = create_session_factory(engine)
     aws_config = AwsConfig(
@@ -142,4 +152,8 @@ def build_container(settings: Settings) -> Container:
         notifier=SlackNotifier(settings.slack_webhook_url),
         sqs=SqsConsumer(aws_session, aws_config, settings.sqs_queue_url),
         pdf_renderer=WeasyPrintPdfRenderer(),
+        metrics=EmfMetrics(
+            namespace=settings.metrics_namespace,
+            dimensions={"Env": settings.env, "Service": service},
+        ),
     )

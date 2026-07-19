@@ -17,7 +17,7 @@ from app.infra.embedding.fake_client import FakeEmbeddingClient
 from app.infra.llm.fake_client import FakeLLMClient
 from app.services.ingest import IngestService
 from app.services.search import DoneEvent, NoResultsEvent, SearchService, SourcesEvent
-from tests.unit.fakes import FakeMasker, FakeNotifier, FakeStorage
+from tests.unit.fakes import FakeMasker, FakeMetrics, FakeNotifier, FakeStorage
 
 pytestmark = pytest.mark.integration
 
@@ -48,6 +48,7 @@ async def _ingest(
                 embedder=FakeEmbeddingClient(dim=1024),
                 repository=SqlReportRepository(session),
                 notifier=FakeNotifier(),
+                metrics=FakeMetrics(),
                 confidence_threshold=0.85,
             )
             await service.ingest_from_key(key)
@@ -58,6 +59,7 @@ def _search_service(session: AsyncSession) -> SearchService:
         llm=FakeLLMClient(),
         embedder=FakeEmbeddingClient(dim=1024),
         repository=SqlSearchRepository(session),
+        metrics=FakeMetrics(),
     )
 
 

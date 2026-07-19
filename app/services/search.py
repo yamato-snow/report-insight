@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from app.core.logging import get_logger
 from app.domain.entities import SearchFilters, User
 from app.domain.values import SEARCH_TOP_K
-from app.services.ports import EmbeddingClient, LLMClient, SearchRepository
+from app.services.ports import EmbeddingClient, LLMClient, MetricsPort, SearchRepository
 
 logger = get_logger(__name__)
 
@@ -58,10 +58,12 @@ class SearchService:
         llm: LLMClient,
         embedder: EmbeddingClient,
         repository: SearchRepository,
+        metrics: MetricsPort,
     ) -> None:
         self._llm = llm
         self._embedder = embedder
         self._repo = repository
+        self._metrics = metrics
 
     async def search(
         self, user: User, query: str, filters: SearchFilters
@@ -78,8 +80,10 @@ class SearchService:
         query_vec = await self._embedder.embed_query(query)
         hits = await self._repo.hybrid_search(query_vec, filters, permitted, SEARCH_TOP_K)
 
+        self._metrics.incr("search_total")
         if not hits:
             # 0件は LLM を呼ばない（ハルシネーション防止・コスト節約。LLM設計書 §2）
+            self._metrics.incr("search_no_results")
             log.info("search.no_results")
             yield NoResultsEvent()
             return
@@ -109,6 +113,9 @@ class SearchService:
             log.warning("search.hallucinated_citations", ids=sorted(hallucinated))
 
         usage = stream.usage
+        self._metrics.emit_tokens(
+            input_tokens=usage.input_tokens, output_tokens=usage.output_tokens
+        )
         latency_ms = int((time.perf_counter() - started) * 1000)
         log.info(
             "search.completed",

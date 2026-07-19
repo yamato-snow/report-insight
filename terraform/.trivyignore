@@ -5,3 +5,17 @@
 # 対象は「公開 ALB の 80/443」のみ（modules/network の alb SG）。インターネット公開の
 # Web エンドポイントとして意図した構成。ECS/RDS の SG は SG 参照のみで公開していない。
 AVD-AWS-0107
+
+# AVD-AWS-0104: セキュリティグループの 0.0.0.0/0 アウトバウンド（全開放 egress）。
+# 対象は modules/network の alb / ecs SG。ECS タスク(worker/api)は Anthropic API・S3・
+# Secrets Manager・ECR・CloudWatch Logs 等へ外向き HTTPS が必要（NAT 経由・privateサブネット）。
+# ALB もターゲットへ転送する。いずれもインターネット公開ではなく意図した外向き通信。
+# NOTE(hardening): 将来的に egress を 443(+RDS 5432) 限定 or VPCエンドポイント化して除外解除する。
+AVD-AWS-0104
+
+# AVD-AWS-0054: ALB リスナが HTTPS でなく HTTP（modules/ecs の aws_lb_listener.http）。
+# 本番 TLS 終端(ACM 証明書 + 443 リスナ + 80→443 リダイレクト)は後続 P2 ステップで導入する
+# 既知の暫定状態（CI設計 §2 のコメント参照）。Trivy v0.70 で本ルールが HIGH→CRITICAL に
+# 格上げされ severity=CRITICAL フィルタでブロックされるようになったため、それまで明示除外する。
+# NOTE(hardening): ACM/HTTPS リスナ導入時に本除外を解除する。
+AVD-AWS-0054

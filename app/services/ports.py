@@ -82,6 +82,40 @@ class NotificationPort(Protocol):
     async def notify_urgent(self, report: Report, analysis: ReportAnalysis) -> None: ...
 
 
+class MetricsPort(Protocol):
+    """カスタムメトリクス送出（観測層。運用ハンドブック S8 の4指標）。
+
+    実装は CloudWatch EMF（stdout JSON）で送る（infra/observability）。domain/services は
+    この Protocol だけを知り、EMF/CloudWatch を直接知らない（アーキテクチャ規約 §4）。
+    送出は fire-and-forget（監視の失敗が業務処理を止めてはならない）ので同期・戻り値なし。
+    """
+
+    def incr(self, name: str, value: int = 1, **dimensions: str) -> None:
+        """カウンタ系メトリクスを value だけ加算する（既定 1）。"""
+        ...
+
+    def emit_tokens(self, *, input_tokens: int, output_tokens: int, **dimensions: str) -> None:
+        """LLM トークン消費（input/output）を送出する（コスト先行指標。runbook §5）。"""
+        ...
+
+
+class NullMetrics:
+    """何もしない MetricsPort（Null Object）。
+
+    本番は DI が EMF 実装を、テストは Fake を明示注入する。これは観測が不要な
+    手動構築（評価ハーネス等）向けの既定値で、送出しても外部I/Oを起こさない。
+    """
+
+    def incr(self, name: str, value: int = 1, **dimensions: str) -> None:
+        return None
+
+    def emit_tokens(self, *, input_tokens: int, output_tokens: int, **dimensions: str) -> None:
+        return None
+
+
+NULL_METRICS: MetricsPort = NullMetrics()
+
+
 class ReportRepository(Protocol):
     """報告書・構造化結果の永続化。認可は permitted_property_ids で強制（DB設計書 §2）。"""
 

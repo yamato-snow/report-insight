@@ -64,7 +64,7 @@ async def _consume_loop(container: Container, stop: asyncio.Event) -> None:
 async def run() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
-    container = build_container(settings)
+    container = build_container(settings, service="worker")
     stop = asyncio.Event()
 
     loop = asyncio.get_running_loop()
