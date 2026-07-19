@@ -30,10 +30,12 @@ from app.infra.masking.pii import PIIMasker
 from app.infra.notify.slack import SlackNotifier
 from app.infra.observability.emf import EmfMetrics
 from app.infra.pdf.renderer import WeasyPrintPdfRenderer
+from app.infra.text.normalize import TextNormalizer
 from app.services.admin import AdminService
 from app.services.ingest import IngestService
 from app.services.monthly import MonthlyService
 from app.services.ports import (
+    NULL_NORMALIZER,
     AuditPort,
     EmbeddingClient,
     LLMClient,
@@ -42,6 +44,7 @@ from app.services.ports import (
     ObjectStoragePort,
     PdfRendererPort,
     PIIMaskerPort,
+    TextNormalizerPort,
 )
 from app.services.search import SearchService
 
@@ -61,6 +64,7 @@ class Container:
     sqs: SqsConsumer
     pdf_renderer: PdfRendererPort
     metrics: MetricsPort
+    normalizer: TextNormalizerPort
 
     def ingest_service(self, session: AsyncSession) -> IngestService:
         return IngestService(
@@ -71,6 +75,7 @@ class Container:
             repository=SqlReportRepository(session),
             notifier=self.notifier,
             metrics=self.metrics,
+            normalizer=self.normalizer,
             confidence_threshold=self.settings.confidence_threshold,
         )
 
@@ -126,6 +131,13 @@ def _build_embedder(settings: Settings) -> EmbeddingClient:
     return FakeEmbeddingClient(dim=settings.embedding_dim)
 
 
+def _build_normalizer(settings: Settings) -> TextNormalizerPort:
+    # 未設定＝無変換（配線前と同じ挙動）。対応表は運用還流で蓄積してから指定する。
+    if not settings.normalizer_corrections_path:
+        return NULL_NORMALIZER
+    return TextNormalizer.from_file(settings.normalizer_corrections_path)
+
+
 def build_container(settings: Settings, *, service: str = "app") -> Container:
     """依存を組み立てる。
 
@@ -156,4 +168,5 @@ def build_container(settings: Settings, *, service: str = "app") -> Container:
             namespace=settings.metrics_namespace,
             dimensions={"Env": settings.env, "Service": service},
         ),
+        normalizer=_build_normalizer(settings),
     )

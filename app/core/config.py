@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://app:app@db:5432/report_insight"
     slack_webhook_url: str = "http://webhook-mock:9000/webhook"
 
+    # --- 表記ゆれ正規化 ---
+    # 対応表(JSON)のパス。未設定なら無変換（配線前と同じ挙動）。運用還流で蓄積する前提。
+    normalizer_corrections_path: str | None = None
+
     # --- 実行 ---
     log_level: str = Field(default="INFO")
 
