@@ -1,0 +1,70 @@
+{
+  "_comment": "現場報告の表記ゆれ→正規形の人手確認済み対応表。needs_review の修正から還流して蓄積する（scripts/export_corrections.py）。TextNormalizer が読み込み分類前に適用する。",
+  "corrections": [
+    {
+      "variant": "ろうすい",
+      "canonical": "漏水",
+      "source": "human_verified"
+    },
+    {
+      "variant": "みずもれ",
+      "canonical": "水漏れ",
+      "source": "human_verified"
+    },
+    {
+      "variant": "こしょう",
+      "canonical": "故障",
+      "source": "human_verified"
+    },
+    {
+      "variant": "はそん",
+      "canonical": "破損",
+      "source": "human_verified"
+    },
+    {
+      "variant": "いおん",
+      "canonical": "異音",
+      "source": "human_verified"
+    },
+    {
+      "variant": "ていし",
+      "canonical": "停止",
+      "source": "human_verified"
+    },
+    {
+      "variant": "ふぐあい",
+      "canonical": "不具合",
+      "source": "human_verified"
+    },
+    {
+      "variant": "くじょう",
+      "canonical": "苦情",
+      "source": "human_verified"
+    },
+    {
+      "variant": "そうおん",
+      "canonical": "騒音",
+      "source": "human_verified"
+    },
+    {
+      "variant": "せいそう",
+      "canonical": "清掃",
+      "source": "human_verified"
+    },
+    {
+      "variant": "かさい",
+      "canonical": "火災",
+      "source": "human_verified"
+    },
+    {
+      "variant": "がす",
+      "canonical": "ガス",
+      "source": "human_verified"
+    },
+    {
+      "variant": "ようぼう",
+      "canonical": "要望",
+      "source": "human_verified"
+    }
+  ]
+}

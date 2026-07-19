@@ -2,7 +2,7 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help setup up down down-v migrate demo test test-integration eval lint fmt shell logs
+.PHONY: help setup up down down-v migrate demo test test-integration eval eval-loop lint fmt shell logs
 
 help: ## このヘルプを表示
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -36,6 +36,9 @@ test-integration: ## integration テスト（compose の db/localstack を使用
 
 eval: ## LLM評価ハーネス（実API・要APIキー。LLM設計書 §4）
 	uv run python -m tests.llm_eval.run
+
+eval-loop: ## 劣化検知→改善フローの閉ループ実証（実APIなし・決定的・課金ゼロ）
+	uv run python -m tests.llm_eval.loop_demo
 
 lint: ## ruff + mypy + import-linter
 	uv run ruff check app tests
