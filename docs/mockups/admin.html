@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>報告書の一覧・確認 — モック</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<script src="mock-data.js"></script>
+
+<h1>報告書の一覧・確認 <span class="mockflag">MOCK</span></h1>
+<p class="sub" id="scopeNote"></p>
+
+<form class="row" onsubmit="event.preventDefault(); page = 1; render();">
+  <div>
+    <label>物件</label>
+    <select id="fProperty"><option value="">すべて</option></select>
+  </div>
+  <div>
+    <label>分類</label>
+    <select id="fCategory"><option value="">すべて</option></select>
+  </div>
+  <div>
+    <label>緊急度</label>
+    <select id="fUrgency"><option value="">すべて</option></select>
+  </div>
+  <div>
+    <label>状態</label>
+    <select id="fStatus"><option value="">すべて</option></select>
+  </div>
+  <button type="submit">絞り込み</button>
+  <button type="button" class="secondary" onclick="clearFilters()">条件をクリア</button>
+</form>
+
+<div class="tabs">
+  <button id="tabAll" class="on" onclick="setTab('all')">一覧</button>
+  <button id="tabQueue" onclick="setTab('queue')">未分類キュー <span id="queueCount"></span></button>
+</div>
+
+<div id="queueHelp" class="banner warn" style="display:none">
+  AIが自信を持てなかった報告書です。<strong>行をクリックして正しい分類に直してください。</strong>
+  直すとこのキューから外れ、「人間確認済」になります。
+</div>
+
+<div id="reports"></div>
+
+<div class="pager" id="pager"></div>
+
+<!-- 報告書の詳細＋分類の直し（C と B） -->
+<div class="backdrop" id="modal" onclick="if(event.target===this) closeModal()">
+  <div class="modal" id="modalBody"></div>
+</div>
+
+<script>
+renderTopbar("admin");
+
+const PAGE_SIZE = 20;
+let tab = "all";
+let page = 1;
+
+function initFilters() {
+  const u = currentUser();
+  const ps = permittedProperties(u);
+  document.getElementById("scopeNote").innerHTML =
+    `利用者: ${u.email}（${u.role}） / 権限内の物件のみ表示されます。` +
+    `<br>表示できる物件: ${ps.map(p => p.name).join("、")}`;
+  document.getElementById("fProperty").innerHTML =
+    '<option value="">すべて</option>' + ps.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
+  document.getElementById("fCategory").innerHTML =
+    '<option value="">すべて</option>' + Object.entries(CATEGORY_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+  document.getElementById("fUrgency").innerHTML =
+    '<option value="">すべて</option>' + Object.entries(URGENCY_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+  document.getElementById("fStatus").innerHTML =
+    '<option value="">すべて</option>' + Object.entries(STATUS_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+}
+
+function clearFilters() {
+  ["fProperty", "fCategory", "fUrgency", "fStatus"].forEach(id => document.getElementById(id).value = "");
+  page = 1; render();
+}
+
+function setTab(t) {
+  tab = t; page = 1;
+  document.getElementById("tabAll").className = t === "all" ? "on" : "";
+  document.getElementById("tabQueue").className = t === "queue" ? "on" : "";
+  document.getElementById("queueHelp").style.display = t === "queue" ? "block" : "none";
+  render();
+}
+
+function filtered() {
+  const u = currentUser();
+  const fp = document.getElementById("fProperty").value;
+  const fc = document.getElementById("fCategory").value;
+  const fu = document.getElementById("fUrgency").value;
+  const fs = document.getElementById("fStatus").value;
+  return State.reports.filter(r =>
+    canSee(u, r) &&
+    (tab !== "queue" || r.status === "needs_review") &&
+    (!fp || r.property_id === Number(fp)) &&
+    (!fc || r.category === fc) &&
+    (!fu || r.urgency === fu) &&
+    (!fs || r.status === fs)
+  );
+}
+
+function render() {
+  const rows = filtered();
+  const u = currentUser();
+  const queueTotal = State.reports.filter(r => canSee(u, r) && r.status === "needs_review").length;
+  document.getElementById("queueCount").textContent = queueTotal ? `(${queueTotal})` : "";
+
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  if (page > pages) page = pages;
+  const slice = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  document.getElementById("reports").innerHTML = slice.length === 0
+    ? '<p class="empty">該当する報告書はありません。</p>'
+    : `<table>
+        <thead><tr>
+          <th>ID</th><th>物件</th><th>報告日時</th><th>分類</th>
+          <th>緊急度</th><th>状態</th><th>要約</th>
+        </tr></thead>
+        <tbody>${slice.map(r => `
+          <tr class="clickable" onclick="openReport(${r.id})">
+            <td>${r.id}</td>
+            <td>${propertyName(r.property_id)}</td>
+            <td>${r.reported_at}</td>
+            <td>${CATEGORY_LABELS[r.category]}</td>
+            <td><span class="badge u-${r.urgency}">${URGENCY_LABELS[r.urgency]}</span></td>
+            <td class="s-${r.status}">${STATUS_LABELS[r.status]}</td>
+            <td>${r.summary}</td>
+          </tr>`).join("")}</tbody>
+      </table>`;
+
+  document.getElementById("pager").innerHTML = rows.length === 0 ? "" : `
+    <button ${page <= 1 ? "disabled" : ""} onclick="page--; render()">前へ</button>
+    <span>${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, rows.length)} 件 / 全 ${rows.length} 件（${page} / ${pages} ページ）</span>
+    <button ${page >= pages ? "disabled" : ""} onclick="page++; render()">次へ</button>`;
+}
+
+/* 報告書の詳細（C）— 未分類なら分類の直し（B）も出す */
+function openReport(id) {
+  const r = findReport(id);
+  const editable = r.status === "needs_review";
+  document.getElementById("modalBody").innerHTML = `
+    <div class="spread">
+      <h2 style="margin:0">報告書 #${r.id}</h2>
+      <button class="secondary" onclick="closeModal()">閉じる</button>
+    </div>
+    <table style="margin-top:12px">
+      <tr><th style="width:110px">物件</th><td>${propertyName(r.property_id)}</td></tr>
+      <tr><th>報告日時</th><td>${r.reported_at}</td></tr>
+      <tr><th>AIの分類</th><td>${CATEGORY_LABELS[r.category]}</td></tr>
+      <tr><th>AIの緊急度</th><td><span class="badge u-${r.urgency}">${URGENCY_LABELS[r.urgency]}</span></td></tr>
+      <tr><th>状態</th><td class="s-${r.status}">${STATUS_LABELS[r.status]}</td></tr>
+      <tr><th>AIの確信度</th><td>${r.confidence}${r.confidence < 0.85 ? "（低いため人の確認が必要です）" : ""}</td></tr>
+    </table>
+
+    <h2>AIの要約</h2>
+    <p>${r.summary}</p>
+
+    <h2>現場スタッフの原文</h2>
+    <div class="card" style="white-space:pre-wrap">${r.body}</div>
+
+    ${editable ? `
+      <h2>分類を直す</h2>
+      <p class="muted">正しい内容に直して確定すると「人間確認済」になり、未分類キューから外れます。この操作は監査ログに残ります。</p>
+      <div class="row">
+        <div>
+          <label>分類</label>
+          <select id="editCategory">
+            ${Object.entries(CATEGORY_LABELS).map(([k, v]) =>
+              `<option value="${k}" ${k === r.category ? "selected" : ""}>${v}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <label>緊急度</label>
+          <select id="editUrgency">
+            ${Object.entries(URGENCY_LABELS).map(([k, v]) =>
+              `<option value="${k}" ${k === r.urgency ? "selected" : ""}>${v}</option>`).join("")}
+          </select>
+        </div>
+        <button onclick="saveAnalysis(${r.id})">この内容で確定する</button>
+      </div>`
+      : `<div class="banner ok" style="margin-top:16px">この報告書は確認済みのため、修正待ちの状態ではありません。</div>`}
+  `;
+  document.getElementById("modal").classList.add("open");
+}
+
+function closeModal() { document.getElementById("modal").classList.remove("open"); }
+
+function saveAnalysis(id) {
+  const r = findReport(id);
+  const before = `${CATEGORY_LABELS[r.category]} / ${URGENCY_LABELS[r.urgency]}`;
+  r.category = document.getElementById("editCategory").value;
+  r.urgency = document.getElementById("editUrgency").value;
+  r.status = "human_verified";
+  saveState(State);
+  logAudit("分類の上書き", `報告書 #${id}`,
+    `${before} → ${CATEGORY_LABELS[r.category]} / ${URGENCY_LABELS[r.urgency]}`);
+  closeModal();
+  render();
+}
+
+initFilters();
+render();
+</script>
+</body>
+</html>

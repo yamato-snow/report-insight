@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>月次報告書 — モック</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<script src="mock-data.js"></script>
+
+<h1>月次報告書 <span class="mockflag">MOCK</span></h1>
+<p class="sub" id="scopeNote"></p>
+
+<div class="card">
+  <h2 style="margin-top:0">新しくドラフトを作る</h2>
+  <p class="muted">
+    物件と月を選ぶと、その月の報告書をAIが集計して報告書のたたき台を作ります。
+    件数はデータベースの集計値で、AIが書くのは「所見」の文章だけです。
+  </p>
+  <form class="row" onsubmit="event.preventDefault(); doGenerate();">
+    <div>
+      <label>物件</label>
+      <select id="gProperty"></select>
+    </div>
+    <div>
+      <label>対象月</label>
+      <select id="gMonth">
+        <option value="2026-07">2026年7月</option>
+        <option value="2026-06">2026年6月</option>
+      </select>
+    </div>
+    <button type="submit" id="genBtn">ドラフトを作る</button>
+  </form>
+  <div id="genStatus"></div>
+</div>
+
+<h2>作成済みの報告書</h2>
+<div id="list"></div>
+
+<script>
+renderTopbar("monthly");
+
+function init() {
+  const u = currentUser();
+  const ps = permittedProperties(u);
+  document.getElementById("scopeNote").innerHTML =
+    `利用者: ${u.email}（${u.role}）` +
+    (isQa(u)
+      ? " / <strong>品質管理部は閲覧のみです。</strong>作成・承認はできません。"
+      : ` / ${BRANCHES[u.branch_id]}の物件の報告書を作成・承認できます。`);
+
+  document.getElementById("gProperty").innerHTML =
+    ps.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
+
+  if (isQa(u)) {
+    document.getElementById("genBtn").disabled = true;
+    document.getElementById("genStatus").innerHTML =
+      '<div class="banner deny">品質管理部の権限では月次報告書を作成できません（閲覧のみ）。' +
+      '支店管理者に切り替えると作成できます。</div>';
+  }
+  render();
+}
+
+function doGenerate() {
+  const pid = document.getElementById("gProperty").value;
+  const month = document.getElementById("gMonth").value;
+  const el = document.getElementById("genStatus");
+
+  // 本番は生成に時間がかかるため「作成中」を挟む挙動を再現する
+  el.innerHTML = '<div class="banner info">作成中です… AIが当月の報告書を読んでいます（通常30秒ほど）</div>';
+  document.getElementById("genBtn").disabled = true;
+  setTimeout(() => {
+    const rec = generateMonthly(pid, month);
+    document.getElementById("genBtn").disabled = false;
+    el.innerHTML = '<div class="banner ok">ドラフトができました。編集画面を開いて内容を確認してください。</div>';
+    render();
+    location.href = `monthly-edit.html?id=${rec.id}`;
+  }, 1200);
+}
+
+function render() {
+  const u = currentUser();
+  const rows = State.monthly.filter(m => permittedProperties(u).some(p => p.id === m.property_id));
+  document.getElementById("list").innerHTML = rows.length === 0
+    ? '<p class="empty">まだ作成された月次報告書はありません。上のフォームから作ってみてください。</p>'
+    : `<table>
+        <thead><tr><th>物件</th><th>対象月</th><th>状態</th><th>版</th><th>承認者</th><th></th></tr></thead>
+        <tbody>${rows.map(m => `
+          <tr>
+            <td>${propertyName(m.property_id)}</td>
+            <td>${m.month}</td>
+            <td class="${m.status === "approved" ? "s-human_verified" : ""}">
+              ${m.status === "approved" ? "承認済み（確定）" : "ドラフト（編集可）"}
+            </td>
+            <td>v${m.version}</td>
+            <td>${m.approved_by || "—"}</td>
+            <td><a href="monthly-edit.html?id=${m.id}">${m.status === "approved" ? "開く" : "編集する"}</a></td>
+          </tr>`).join("")}</tbody>
+      </table>`;
+}
+
+init();
+</script>
+</body>
+</html>

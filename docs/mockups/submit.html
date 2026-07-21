@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>報告を投入する（検査用） — モック</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<script src="mock-data.js"></script>
+
+<h1>報告を投入する <span class="mockflag">検査用</span></h1>
+<p class="sub">
+  現場スタッフになったつもりで報告書を書き、<strong>AIがどう仕分けるか</strong>をその場で確認する画面です。
+</p>
+
+<div class="banner warn">
+  <strong>これは製品の機能ではありません。</strong>
+  要件定義で現場スタッフ向けの報告画面は<strong>スコープ外</strong>（既存の報告システムを使い続ける）と決まっています。
+  本番では、現場スタッフが既存システムに提出した報告書が日次でS3経由で流れ込みます。
+  この画面はその流入を手で再現するための<strong>受入テスト用の治具</strong>です。
+</div>
+
+<div class="card">
+  <form onsubmit="event.preventDefault(); doSubmit();">
+    <div class="row">
+      <div>
+        <label>物件</label>
+        <select id="sProperty"></select>
+      </div>
+      <div>
+        <label>報告日時</label>
+        <input type="text" id="sAt" size="16">
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <label>報告内容（現場スタッフが書く自由記述）</label>
+      <textarea id="sBody" style="width:100%; min-height:150px"
+        placeholder="例）3階の廊下を巡回中、天井から水がポタポタ落ちているのを見つけました。バケツを置いて応急処置しています。"></textarea>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button type="submit">投入してAIに仕分けさせる</button>
+      <button type="button" class="secondary" onclick="document.getElementById('sBody').value=''">クリア</button>
+    </div>
+  </form>
+</div>
+
+<h2>書き方の見本（クリックで入力されます）</h2>
+<p class="muted">AIが自信を持てる報告と、迷う報告の違いを見比べられます。</p>
+<div id="samples"></div>
+
+<div id="result"></div>
+
+<script>
+renderTopbar("submit");
+
+const SAMPLES = [
+  { label: "はっきりした設備異常 → AIは自信を持って仕分けるはず",
+    text: "地下1階の機械室で配管から水漏れが発生しています。床が広範囲に濡れており危険なため、止水バルブを閉めて応急処置しました。保守業者に連絡済みです。" },
+  { label: "通常の清掃報告 → 緊急度は低くなるはず",
+    text: "1階から3階までの共用部の清掃を実施しました。床のワックスがけとゴミの回収を行い、特に異常は見当たりませんでした。" },
+  { label: "テナントからの苦情 → クレームに分類されるはず",
+    text: "5階のテナント様より、隣の区画の空調がうるさいというご意見をいただきました。実際に確認したところ低い音が響いており、強くお叱りを受けました。" },
+  { label: "現場が判断に迷っている → 未分類キューに落ちるはず",
+    text: "屋上の排水溝に落ち葉がたまっています。今は水が流れていますが、台風が来たら詰まるかもしれません。すぐ対応すべきか判断がつかないので確認をお願いします。" },
+  { label: "手がかりのない文章 → 分類できず未分類キューに落ちるはず",
+    text: "本日も通常どおり業務を行いました。特記事項は以上です。" },
+];
+
+function init() {
+  document.getElementById("sProperty").innerHTML =
+    PROPERTIES.map(p => `<option value="${p.id}">${p.name}（${BRANCHES[p.branch_id]}）</option>`).join("");
+  const now = new Date();
+  document.getElementById("sAt").value =
+    `2026-07-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  document.getElementById("samples").innerHTML = SAMPLES.map((s, i) => `
+    <div class="card" style="cursor:pointer" onclick="useSample(${i})">
+      <strong>${s.label}</strong>
+      <p class="muted" style="margin:6px 0 0">${s.text}</p>
+    </div>`).join("");
+}
+
+function useSample(i) {
+  document.getElementById("sBody").value = SAMPLES[i].text;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function doSubmit() {
+  const text = document.getElementById("sBody").value.trim();
+  if (!text) { alert("報告内容を入力してください。"); return; }
+  const pid = document.getElementById("sProperty").value;
+  const at = document.getElementById("sAt").value;
+
+  const el = document.getElementById("result");
+  el.innerHTML = '<div class="banner info">AIが読んでいます…（本番では数秒〜10分以内に処理されます）</div>';
+
+  setTimeout(() => {
+    const r = submitReport(pid, text, at);
+    const queued = r.status === "needs_review";
+    el.innerHTML = `
+      <h2>AIの仕分け結果</h2>
+      <div class="card">
+        <table>
+          <tr><th style="width:120px">報告書ID</th><td>#${r.id}</td></tr>
+          <tr><th>物件</th><td>${propertyName(r.property_id)}</td></tr>
+          <tr><th>分類</th><td><strong>${CATEGORY_LABELS[r.category]}</strong></td></tr>
+          <tr><th>緊急度</th><td><span class="badge u-${r.urgency}">${URGENCY_LABELS[r.urgency]}</span></td></tr>
+          <tr><th>確信度</th><td>${r.confidence}</td></tr>
+          <tr><th>判断の理由</th><td>${r.reason}</td></tr>
+          <tr><th>要約</th><td>${r.summary}</td></tr>
+          <tr><th>状態</th><td class="s-${r.status}"><strong>${STATUS_LABELS[r.status]}</strong></td></tr>
+        </table>
+      </div>
+      <div class="banner ${queued ? "warn" : "ok"}">
+        ${queued
+          ? "確信度が基準（0.85）を下回ったため、<strong>未分類キューに入りました。</strong>管理者が確認して分類を直す必要があります。"
+          : "確信度が基準を上回ったため、<strong>そのまま一覧に載りました。</strong>管理者が個別に確認する必要はありません。"}
+      </div>
+      <div class="row">
+        <button onclick="location.href='admin.html${queued ? "" : ""}'">報告書一覧で確認する</button>
+        ${r.urgency === "high" ? '<span class="muted">緊急度「高」のため、本番ではこの時点でSlackに通知が飛びます。</span>' : ""}
+      </div>`;
+    el.scrollIntoView({ behavior: "smooth" });
+  }, 900);
+}
+
+init();
+</script>
+</body>
+</html>
