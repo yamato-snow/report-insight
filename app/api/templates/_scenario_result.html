@@ -1,0 +1,39 @@
+{# HTMX 部分テンプレート: シナリオ1本の判定結果 #}
+<div style="margin-top:10px">
+  {% if result.ok %}
+  <p class="ok-mark">OK — すべての期待どおりでした（{{ result.inputs | length }} 件）</p>
+  {% else %}
+  <p class="ng-mark">NG — 期待と異なる項目があります</p>
+  {% endif %}
+
+  <table>
+    <thead><tr><th>入力</th><th>判定</th></tr></thead>
+    <tbody>
+      {% for inp in result.inputs %}
+      <tr>
+        <td>{{ inp.text }}</td>
+        <td>
+          {% if inp.ok %}<span class="ok-mark">OK</span>{% else %}<span class="ng-mark">NG</span>{% endif %}
+          <div class="muted">
+            {% for c in inp.checks %}
+            {% if c.ok %}✓{% else %}<span class="ng-mark">✗</span>{% endif %}
+            {{ c.field }}={{ c.actual }}{% if not c.ok %}（期待 {{ c.expected }}）{% endif %}{% if not loop.last %} / {% endif %}
+            {% endfor %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+      {% if result.overall_checks %}
+      <tr>
+        <td><strong>全体</strong></td>
+        <td>
+          {% for c in result.overall_checks %}
+          {% if c.ok %}✓{% else %}<span class="ng-mark">✗</span>{% endif %}
+          {{ c.field }}={{ c.actual }}{% if not c.ok %}（期待 {{ c.expected }}）{% endif %}{% if not loop.last %} / {% endif %}
+          {% endfor %}
+        </td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>

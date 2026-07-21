@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report Insight — 月次報告書</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  {% include "_topbar.html" %}
+
+  <h1>月次報告書</h1>
+  <p class="sub">
+    利用者: {{ user.email }}（{{ role_labels[user.role] }}）
+    {% if user.is_qa %}/ 品質管理部は閲覧のみです。作成・承認はできません。{% endif %}
+  </p>
+
+  {% if user.is_qa %}
+  <div class="banner deny">
+    品質管理部の権限では月次報告書を作成・承認できません（閲覧のみ）。
+  </div>
+  {% else %}
+  <h2>新しくドラフトを作る</h2>
+  <p class="muted">
+    物件と月を選ぶと、その月の報告書を集計してたたき台を作ります。
+    件数はデータベースの集計値で、AIが書くのは「所見」の文章だけです。
+  </p>
+  <form class="row" method="post" action="/monthly?uid={{ uid }}">
+    <div>
+      <label>物件</label>
+      <select name="property_id">
+        {% for p in properties %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>対象月</label>
+      <select name="month">
+        {% for m in months %}
+        <option value="{{ m.isoformat() }}">{{ m.year }}年{{ m.month }}月</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit">ドラフトを作る</button>
+  </form>
+  {% endif %}
+
+  <h2>作成済みの報告書</h2>
+  {% if not reports %}
+  <p class="muted">まだ作成された月次報告書はありません。</p>
+  {% else %}
+  <table>
+    <thead>
+      <tr><th>物件</th><th>対象月</th><th>状態</th><th>版</th><th>承認日時</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for r in reports %}
+      <tr>
+        <td>{{ property_names.get(r.property_id, r.property_id) }}</td>
+        <td>{{ r.month.strftime("%Y-%m") }}</td>
+        <td class="{% if r.status.value == 'approved' %}s-human_verified{% elif r.status.value == 'failed' %}s-failed{% endif %}">
+          {{ monthly_status_labels[r.status] }}
+        </td>
+        <td>v{{ r.version }}</td>
+        <td>{{ r.approved_at.strftime("%Y-%m-%d %H:%M") if r.approved_at else "—" }}</td>
+        <td><a href="/monthly/{{ r.id }}?uid={{ uid }}">開く</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</body>
+</html>

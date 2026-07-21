@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report Insight — 受入シナリオ（検査用）</title>
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .scn { border: 1px solid #8884; border-radius: 8px; padding: 12px 14px; margin: 10px 0; }
+  .scn-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  .ng-mark { color: #dc2626; font-weight: 700; }
+  .ok-mark { color: #059669; font-weight: 700; }
+  .result { margin-top: 10px; }
+</style>
+</head>
+<body>
+  <h1>受入シナリオ <span style="background:#7c3aed;color:#fff;font-size:.68rem;padding:1px 7px;border-radius:999px;vertical-align:middle">検査用</span></h1>
+  <p class="sub">
+    入力と期待値をまとめた JSON（<code>tests/scenarios/cases/</code>）を選んで実行し、
+    パイプラインの振り分けが期待どおりかを自動判定します。<code>make scenario</code> と同じ判定です。
+  </p>
+  <div class="banner info">
+    ここは製品機能ではなく受入テストの治具です。分類は決定的な擬似AI（キーワード判定）で行い、課金は発生しません。
+    AIの<strong>精度そのもの</strong>の評価は別途 <code>make eval</code>（実API）が担います。
+  </div>
+
+  <p class="muted" style="margin:14px 0">各シナリオの「実行」を押すと、その場で判定結果が開きます。</p>
+
+  {% for s in specs %}
+  <div class="scn">
+    <div class="scn-head">
+      <div>
+        <strong>{{ s.name }}</strong>
+        <div class="muted">対応要件: {{ s.requirements | join(", ") }} ／ 入力 {{ s.input_count }} 件 ／ <code>{{ s.stem }}.json</code></div>
+      </div>
+      <button hx-get="/scenarios/{{ s.stem }}/run" hx-target="#result-{{ s.stem }}" hx-swap="innerHTML">実行</button>
+    </div>
+    <div class="result" id="result-{{ s.stem }}"></div>
+  </div>
+  {% endfor %}
+</body>
+</html>

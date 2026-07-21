@@ -114,6 +114,8 @@ def _service(repo: FakeMonthlyRepo, *, permitted: list[int]) -> tuple[MonthlySer
     return service, audit
 
 
+# 月次の生成・編集・承認は支店管理者の操作（API設計書 §4 の権限マトリクス）。
+_MANAGER = User(id=1, email="mgr@e.com", role=Role.BRANCH_MANAGER, branch_id=1)
 _QA = User(id=2, email="qa@e.com", role=Role.QA, branch_id=None)
 
 
@@ -121,7 +123,7 @@ async def test_lifecycle_generate_draft_approve() -> None:
     repo = FakeMonthlyRepo(stats=_stats())
     service, audit = _service(repo, permitted=[101])
 
-    created = await service.request_generation(_QA, 101, _MONTH)
+    created = await service.request_generation(_MANAGER, 101, _MONTH)
     assert created.status is MonthlyStatus.GENERATING
     assert created.version == 1
 
@@ -131,12 +133,12 @@ async def test_lifecycle_generate_draft_approve() -> None:
     assert "総報告件数: 3 件" in drafted.body_markdown
     assert "## 所見" in drafted.body_markdown
 
-    edited = await service.save_draft(_QA, created.id or 0, drafted.body_markdown + "\n追記")
+    edited = await service.save_draft(_MANAGER, created.id or 0, drafted.body_markdown + "\n追記")
     assert edited.body_markdown.endswith("追記")
 
-    approved = await service.approve(_QA, created.id or 0)
+    approved = await service.approve(_MANAGER, created.id or 0)
     assert approved.status is MonthlyStatus.APPROVED
-    assert approved.approved_by == _QA.id
+    assert approved.approved_by == _MANAGER.id
     # 承認は監査ログに記録される
     assert audit.records and audit.records[0]["action"] == "approve_monthly"
 
@@ -144,21 +146,21 @@ async def test_lifecycle_generate_draft_approve() -> None:
 async def test_edit_after_approved_is_invalid_state() -> None:
     repo = FakeMonthlyRepo(stats=_stats())
     service, _ = _service(repo, permitted=[101])
-    created = await service.request_generation(_QA, 101, _MONTH)
+    created = await service.request_generation(_MANAGER, 101, _MONTH)
     await service.run_generation(created.id or 0)
-    await service.approve(_QA, created.id or 0)
+    await service.approve(_MANAGER, created.id or 0)
 
     with pytest.raises(InvalidStateError):
-        await service.save_draft(_QA, created.id or 0, "承認後の編集")
+        await service.save_draft(_MANAGER, created.id or 0, "承認後の編集")
     with pytest.raises(InvalidStateError):
-        await service.approve(_QA, created.id or 0)
+        await service.approve(_MANAGER, created.id or 0)
 
 
 async def test_regeneration_bumps_version() -> None:
     repo = FakeMonthlyRepo(stats=_stats())
     service, _ = _service(repo, permitted=[101])
-    first = await service.request_generation(_QA, 101, _MONTH)
-    second = await service.request_generation(_QA, 101, _MONTH)
+    first = await service.request_generation(_MANAGER, 101, _MONTH)
+    second = await service.request_generation(_MANAGER, 101, _MONTH)
     assert (first.version, second.version) == (1, 2)
 
 
@@ -166,7 +168,25 @@ async def test_generate_out_of_scope_property_forbidden() -> None:
     repo = FakeMonthlyRepo(stats=_stats())
     service, _ = _service(repo, permitted=[999])  # 101 は範囲外
     with pytest.raises(PermissionDeniedError):
+        await service.request_generation(_MANAGER, 101, _MONTH)
+
+
+async def test_qa_cannot_write_monthly_reports() -> None:
+    """品質管理部は閲覧のみ（API設計書 §4）。全物件が permitted でも書き込みは拒否される。"""
+    repo = FakeMonthlyRepo(stats=_stats())
+    service, _ = _service(repo, permitted=[101])
+    created = await service.request_generation(_MANAGER, 101, _MONTH)
+    await service.run_generation(created.id or 0)
+
+    with pytest.raises(PermissionDeniedError):
         await service.request_generation(_QA, 101, _MONTH)
+    with pytest.raises(PermissionDeniedError):
+        await service.save_draft(_QA, created.id or 0, "QAによる編集")
+    with pytest.raises(PermissionDeniedError):
+        await service.approve(_QA, created.id or 0)
+
+    # 閲覧はできる
+    assert (await service.get(_QA, created.id or 0)).status is MonthlyStatus.DRAFT
 
 
 def test_render_markdown_uses_confirmed_counts() -> None:
