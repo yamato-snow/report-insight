@@ -29,6 +29,11 @@ __pycache__/
 tmp/
 tests/llm_eval/last_result.json
 
+# Node（Mermaid 描画チェック用の一時依存。恒久的な JS 依存管理はしない）
+node_modules/
+package.json
+package-lock.json
+
 # Terraform
 **/.terraform/*
 *.tfstate

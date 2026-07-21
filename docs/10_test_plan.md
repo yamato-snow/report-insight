@@ -11,7 +11,7 @@
 
 ```mermaid
 graph TD
-    subgraph 決定的テスト（ピラミッド）
+    subgraph pyramid["決定的テスト（ピラミッド）"]
         E2E[E2E / 受入: make demo + 手動チェックリスト<br>少数]
         INT[integration: 実DB・LocalStack<br>中程度]
         UNIT[unit: domain / services + Fakeポート<br>多数・高速]

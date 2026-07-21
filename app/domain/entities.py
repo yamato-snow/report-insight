@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.values import (
     AnalysisStatus,
+    AuditAction,
     Category,
     MonthlyStatus,
     Role,
@@ -171,6 +172,16 @@ class MonthlyStats(BaseModel):
     by_category: dict[Category, int] = Field(default_factory=dict)
     by_urgency: dict[Urgency, int] = Field(default_factory=dict)
     action_required: int = 0
+
+
+class AuditEntry(BaseModel):
+    """監査ログ1件（DB設計書 04: audit_logs）。追記専用のため読み取り専用の型として扱う。"""
+
+    id: int
+    actor_email: str
+    action: AuditAction
+    payload: dict[str, object] = Field(default_factory=dict)
+    created_at: datetime
 
 
 class MonthlyNarration(BaseModel):

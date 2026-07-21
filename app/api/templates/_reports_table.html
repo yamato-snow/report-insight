@@ -10,14 +10,18 @@
   </thead>
   <tbody>
     {% for r in reports %}
-    <tr>
+    {# 行クリックで詳細を開く。認可は AdminService 側で強制されるため権限外は 403 になる #}
+    <tr class="clickable"
+        hx-get="/admin/reports/{{ r.id }}?uid={{ uid }}"
+        hx-target="#detail"
+        hx-swap="innerHTML">
       <td>{{ r.id }}</td>
-      <td>{{ r.property_id }}</td>
+      <td>{{ property_names.get(r.property_id, r.property_id) }}</td>
       <td>{{ r.reported_at.strftime("%Y-%m-%d %H:%M") }}</td>
       {% if r.analysis %}
-      <td>{{ r.analysis.category.value }}</td>
-      <td><span class="badge u-{{ r.analysis.urgency.value }}">{{ r.analysis.urgency.value }}</span></td>
-      <td class="s-{{ r.analysis.status.value }}">{{ r.analysis.status.value }}</td>
+      <td>{{ category_labels[r.analysis.category] }}</td>
+      <td><span class="badge u-{{ r.analysis.urgency.value }}">{{ urgency_labels[r.analysis.urgency] }}</span></td>
+      <td class="s-{{ r.analysis.status.value }}">{{ status_labels[r.analysis.status] }}</td>
       <td>{{ r.analysis.normalized_summary }}</td>
       {% else %}
       <td>-</td><td>-</td><td>-</td><td>-</td>
@@ -26,4 +30,21 @@
     {% endfor %}
   </tbody>
 </table>
+
+{# keyset ページング（id の降順で cursor 未満を辿る）。戻りは「最初のページへ」で代替する #}
+{% set base = "/admin/reports?uid=" ~ uid ~ ("&queue=true" if queue else "")
+   ~ ("&property_id=" ~ query.property_id if query.property_id else "")
+   ~ ("&category=" ~ query.category if query.category else "")
+   ~ ("&urgency=" ~ query.urgency if query.urgency else "")
+   ~ ("&status=" ~ query.status if query.status else "") %}
+<div class="pager">
+  {% if not is_first_page %}
+  <button class="secondary" hx-get="{{ base }}" hx-target="#reports" hx-swap="innerHTML">最初のページへ</button>
+  {% endif %}
+  {% if next_cursor %}
+  <button hx-get="{{ base }}&cursor={{ next_cursor }}" hx-target="#reports" hx-swap="innerHTML">次の{{ reports|length }}件へ</button>
+  {% else %}
+  <span style="color:#888; font-size:.85rem">これが最後のページです</span>
+  {% endif %}
+</div>
 {% endif %}

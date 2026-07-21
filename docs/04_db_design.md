@@ -47,7 +47,7 @@ erDiagram
         timestamptz created_at
     }
     report_analyses {
-        bigint report_id PK_FK
+        bigint report_id PK, FK
         text category "cleaning|equipment_failure|claim|other"
         text urgency "high|medium|low"
         boolean action_required

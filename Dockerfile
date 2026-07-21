@@ -9,12 +9,14 @@ ENV PYTHONUNBUFFERED=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 
-# WeasyPrint(pango/cairo) と fastembed(onnxruntime) の実行時ライブラリ
+# WeasyPrint(pango/cairo) と fastembed(onnxruntime) の実行時ライブラリ。
+# fonts-noto-cjk は月次報告書PDFの日本語描画に必須（無いと全文字が豆腐□になる。F-3-3）。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         libpango-1.0-0 libpangocairo-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 \
         libffi-dev libjpeg62-turbo shared-mime-info \
         libgomp1 \
+        fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.8.8 /uv /usr/local/bin/uv

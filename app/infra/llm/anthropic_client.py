@@ -27,6 +27,7 @@ from app.domain.entities import (
     SearchHit,
 )
 from app.domain.errors import RetryableError
+from app.domain.labels import CATEGORY_JP, URGENCY_JP
 from app.infra.llm.prompts import load_prompt
 
 
@@ -161,9 +162,10 @@ def _render_stats(property_name: str, stats: MonthlyStats) -> str:
         f"要対応件数: {stats.action_required}",
         "分類別:",
     ]
-    lines += [f"  - {cat.value}: {n}" for cat, n in stats.by_category.items()]
+    # 所見の散文に英字の enum 値が漏れないよう、LLM には日本語ラベルで渡す
+    lines += [f"  - {CATEGORY_JP[cat]}: {n}" for cat, n in stats.by_category.items()]
     lines.append("緊急度別:")
-    lines += [f"  - {urg.value}: {n}" for urg, n in stats.by_urgency.items()]
+    lines += [f"  - {URGENCY_JP[urg]}: {n}" for urg, n in stats.by_urgency.items()]
     return "\n".join(lines)
 
 

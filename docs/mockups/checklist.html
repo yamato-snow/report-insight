@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>受入テスト チェックリスト — モック</title>
+<link rel="stylesheet" href="mock.css">
+<style>
+  .case { border: 1px solid #8883; border-radius: 8px; padding: 12px 14px; margin: 10px 0; }
+  .case.pass { border-color: #059669; background: #05966910; }
+  .case.fail { border-color: #dc2626; background: #dc262610; }
+  .case-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+  .cid { font-weight: 700; font-family: ui-monospace, monospace; }
+  .meta { font-size: .72rem; color: #888; }
+  .case ol { margin: 6px 0 6px 1.1rem; padding: 0; font-size: .88rem; }
+  .case .exp { font-size: .88rem; background: #8881; border-radius: 6px; padding: 8px 10px; margin-top: 6px; }
+  .verdict { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .verdict button { padding: 4px 12px; font-size: .8rem; background: #6b7280; }
+  .verdict button.on-pass { background: #059669; }
+  .verdict button.on-fail { background: #dc2626; }
+  .verdict input { flex: 1 1 240px; }
+  .progress { position: sticky; top: 0; background: Canvas; padding: 10px 0; border-bottom: 1px solid #8883; z-index: 5; }
+  .case.auto { opacity: .72; }
+  .autoflag { background: #059669; color: #fff; font-size: .68rem; padding: 1px 7px; border-radius: 999px; margin-left: 6px; }
+</style>
+</head>
+<body>
+<script src="mock-data.js"></script>
+<script src="testcases.js"></script>
+
+<h1>受入テスト チェックリスト</h1>
+<p class="sub">
+  立場ごとに実際に操作して、結果が期待どおりかを1件ずつ確認します。
+  判定はこのブラウザに保存されるので、途中でやめて再開できます。
+</p>
+
+<div class="progress" id="progress"></div>
+<div id="cases"></div>
+
+<div class="row" style="margin:20px 0">
+  <button onclick="copyResult()">結果をテキストでコピー</button>
+  <button class="secondary" onclick="clearVerdicts()">判定だけ全部消す</button>
+</div>
+<pre id="out" class="card" style="display:none; white-space:pre-wrap; font-size:.8rem"></pre>
+
+<script>
+renderTopbar("checklist");
+
+const VKEY = "ri_uat_verdicts_v1";
+let verdicts = JSON.parse(localStorage.getItem(VKEY) || "{}");
+function saveV() { localStorage.setItem(VKEY, JSON.stringify(verdicts)); }
+
+const ALL = UAT_GROUPS.flatMap(g => g.cases);
+
+function setVerdict(id, v) {
+  const cur = verdicts[id] || {};
+  cur.result = cur.result === v ? null : v;
+  verdicts[id] = cur;
+  saveV(); render();
+}
+function setNote(id, text) {
+  verdicts[id] = verdicts[id] || {};
+  verdicts[id].note = text;
+  saveV();
+  document.getElementById("progress").innerHTML = progressHtml();
+}
+
+function progressHtml() {
+  const manual = ALL.filter(c => !c.auto);
+  const autoCount = ALL.length - manual.length;
+  const pass = manual.filter(c => verdicts[c.id]?.result === "pass").length;
+  const fail = manual.filter(c => verdicts[c.id]?.result === "fail").length;
+  const rest = manual.length - pass - fail;
+  return `<strong>手動確認の進捗</strong> ${pass + fail} / ${manual.length} 件
+    <span class="ok-mark" style="color:#059669">OK ${pass}</span>
+    <span style="color:#dc2626">NG ${fail}</span>
+    <span class="muted">未実施 ${rest}</span>
+    <span class="muted">｜ 自動判定 ${autoCount} 件（make scenario）</span>`;
+}
+
+function render() {
+  document.getElementById("progress").innerHTML = progressHtml();
+  document.getElementById("cases").innerHTML = UAT_GROUPS.map(g => `
+    <h2>${g.id}. ${g.title}</h2>
+    <p class="muted" style="margin:0 0 6px">${g.intro}</p>
+    ${g.cases.map(c => {
+      const v = verdicts[c.id] || {};
+      return `
+      const autoBadge = c.auto
+        ? `<span class="autoflag" title="このケースは ${c.auto} で自動判定されます">自動判定済み（${c.auto}）</span>`
+        : "";
+      return `
+      <div class="case ${c.auto ? "auto" : ""} ${v.result === "pass" ? "pass" : v.result === "fail" ? "fail" : ""}">
+        <div class="case-head">
+          <span class="cid">${c.id}</span>
+          <span class="meta">立場: ${c.role} ／ 実施場所: ${c.where} ／ 対応要件: ${c.req} ${autoBadge}</span>
+        </div>
+        <div class="meta" style="margin-top:4px">前提: ${c.pre}</div>
+        <ol>${c.steps.map(s => `<li>${s}</li>`).join("")}</ol>
+        <div class="exp"><strong>期待する結果:</strong> ${c.expect}</div>
+        ${c.auto
+          ? `<div class="verdict"><span class="muted">パイプラインの振り分けは <code>make scenario</code> と「受入シナリオ」画面で自動判定済み。手動確認は任意です。</span></div>`
+          : `<div class="verdict">
+          <button class="${v.result === "pass" ? "on-pass" : ""}" onclick="setVerdict('${c.id}','pass')">OK</button>
+          <button class="${v.result === "fail" ? "on-fail" : ""}" onclick="setVerdict('${c.id}','fail')">NG</button>
+          <input type="text" placeholder="気づいたこと・NGの理由（任意）"
+            value="${(v.note || "").replace(/"/g, "&quot;")}"
+            oninput="setNote('${c.id}', this.value)">
+        </div>`}
+      </div>`;
+    }).join("")}`).join("");
+}
+
+function copyResult() {
+  const lines = ["# 受入テスト結果", ""];
+  UAT_GROUPS.forEach(g => {
+    lines.push(`## ${g.id}. ${g.title}`, "");
+    lines.push("| ID | 立場 | 判定 | メモ |", "|---|---|---|---|");
+    g.cases.forEach(c => {
+      const v = verdicts[c.id] || {};
+      const mark = c.auto
+        ? "自動判定（make scenario）"
+        : v.result === "pass" ? "OK" : v.result === "fail" ? "NG" : "未実施";
+      lines.push(`| ${c.id} | ${c.role} | ${mark} | ${(v.note || "").replace(/\|/g, "/")} |`);
+    });
+    lines.push("");
+  });
+  const text = lines.join("\n");
+  const out = document.getElementById("out");
+  out.style.display = "block";
+  out.textContent = text;
+  navigator.clipboard?.writeText(text).catch(() => {});
+  out.scrollIntoView({ behavior: "smooth" });
+}
+
+function clearVerdicts() {
+  if (!confirm("判定とメモをすべて消します。よろしいですか？（ダミーデータは消えません）")) return;
+  verdicts = {}; saveV(); render();
+}
+
+render();
+</script>
+</body>
+</html>

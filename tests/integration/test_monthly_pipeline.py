@@ -87,7 +87,7 @@ async def test_monthly_lifecycle_generate_edit_approve_pdf(
         # 生成要求（202・generating で受理）
         created = client.post(
             "/api/v1/monthly-reports",
-            headers={"X-User-Id": "2"},
+            headers={"X-User-Id": "1"},
             json={"property_id": 101, "month": "2026-06-01"},
         )
         assert created.status_code == 202
@@ -95,7 +95,7 @@ async def test_monthly_lifecycle_generate_edit_approve_pdf(
         assert created.json()["status"] == "generating"
 
         # BackgroundTasks 実行後は draft（GET 200）。6月分3件のみ集計。
-        got = client.get(f"/api/v1/monthly-reports/{monthly_id}", headers={"X-User-Id": "2"})
+        got = client.get(f"/api/v1/monthly-reports/{monthly_id}", headers={"X-User-Id": "1"})
         assert got.status_code == 200
         assert got.json()["status"] == "draft"
         assert "総報告件数: 3 件" in got.json()["body_markdown"]
@@ -103,7 +103,7 @@ async def test_monthly_lifecycle_generate_edit_approve_pdf(
         # 保存（人手修正）
         saved = client.patch(
             f"/api/v1/monthly-reports/{monthly_id}",
-            headers={"X-User-Id": "2"},
+            headers={"X-User-Id": "1"},
             json={"action": "save", "body_markdown": got.json()["body_markdown"] + "\n\n追記。"},
         )
         assert saved.status_code == 200
@@ -112,7 +112,7 @@ async def test_monthly_lifecycle_generate_edit_approve_pdf(
         # 承認 → approved
         approved = client.patch(
             f"/api/v1/monthly-reports/{monthly_id}",
-            headers={"X-User-Id": "2"},
+            headers={"X-User-Id": "1"},
             json={"action": "approve"},
         )
         assert approved.status_code == 200
@@ -121,13 +121,13 @@ async def test_monthly_lifecycle_generate_edit_approve_pdf(
         # approved 後の編集は 422
         rejected = client.patch(
             f"/api/v1/monthly-reports/{monthly_id}",
-            headers={"X-User-Id": "2"},
+            headers={"X-User-Id": "1"},
             json={"action": "save", "body_markdown": "承認後の改ざん"},
         )
         assert rejected.status_code == 422
 
         # PDF（Fake レンダラ）
-        pdf = client.get(f"/api/v1/monthly-reports/{monthly_id}/pdf", headers={"X-User-Id": "2"})
+        pdf = client.get(f"/api/v1/monthly-reports/{monthly_id}/pdf", headers={"X-User-Id": "1"})
         assert pdf.status_code == 200
         assert pdf.headers["content-type"] == "application/pdf"
         assert pdf.content.startswith(b"%PDF")
@@ -147,6 +147,46 @@ async def test_monthly_get_returns_202_while_generating(
         got = client.get(f"/api/v1/monthly-reports/{monthly_id}", headers={"X-User-Id": "2"})
     assert got.status_code == 202
     assert got.json()["status"] == "generating"
+
+
+async def test_qa_cannot_write_monthly_but_can_read(
+    seeded: async_sessionmaker[AsyncSession],
+) -> None:
+    """品質管理部は月次を閲覧のみ（API設計書 §4 の権限マトリクス）。
+
+    QA は全物件が permitted になるため、物件スコープだけでは書き込みを止められない。
+    """
+    async with unit_of_work(seeded) as session:
+        report = await SqlMonthlyReportRepository(session).create_generating(
+            101, date(2026, 6, 1), [101]
+        )
+    monthly_id = report.id
+
+    with _client() as client:
+        created = client.post(
+            "/api/v1/monthly-reports",
+            headers={"X-User-Id": "2"},
+            json={"property_id": 101, "month": "2026-06-01"},
+        )
+        assert created.status_code == 403
+
+        saved = client.patch(
+            f"/api/v1/monthly-reports/{monthly_id}",
+            headers={"X-User-Id": "2"},
+            json={"action": "save", "body_markdown": "QAによる編集"},
+        )
+        assert saved.status_code == 403
+
+        approved = client.patch(
+            f"/api/v1/monthly-reports/{monthly_id}",
+            headers={"X-User-Id": "2"},
+            json={"action": "approve"},
+        )
+        assert approved.status_code == 403
+
+        # 閲覧はできる（generating のため 202）
+        got = client.get(f"/api/v1/monthly-reports/{monthly_id}", headers={"X-User-Id": "2"})
+        assert got.status_code == 202
 
 
 async def test_branch_manager_cannot_generate_other_branch(

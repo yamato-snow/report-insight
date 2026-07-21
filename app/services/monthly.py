@@ -11,7 +11,8 @@ from datetime import UTC, date, datetime
 
 from app.core.logging import get_logger
 from app.domain.entities import MonthlyNarration, MonthlyReport, MonthlyStats, User
-from app.domain.errors import InvalidStateError
+from app.domain.errors import InvalidStateError, PermissionDeniedError
+from app.domain.labels import CATEGORY_JP, URGENCY_JP
 from app.domain.values import AuditAction, Category, MonthlyStatus, Urgency
 from app.services.ports import (
     AuditPort,
@@ -22,17 +23,12 @@ from app.services.ports import (
 
 logger = get_logger(__name__)
 
-_CATEGORY_LABELS: dict[Category, str] = {
-    Category.CLEANING: "清掃",
-    Category.EQUIPMENT_FAILURE: "設備不具合",
-    Category.CLAIM: "苦情・要望",
-    Category.OTHER: "その他",
-}
-_URGENCY_LABELS: dict[Urgency, str] = {
-    Urgency.HIGH: "高",
-    Urgency.MEDIUM: "中",
-    Urgency.LOW: "低",
-}
+# 月次報告書一覧の表示上限（画面用。件数が増えても1画面に収める）
+LIST_LIMIT = 50
+
+# 表示ラベルはドメイン層の唯一の正本を使う（表記ゆれ防止）
+_CATEGORY_LABELS = CATEGORY_JP
+_URGENCY_LABELS = URGENCY_JP
 
 
 class MonthlyService:
@@ -51,11 +47,24 @@ class MonthlyService:
         self._audit = audit
         self._permissions = permissions
 
+    @staticmethod
+    def _deny_qa_writes(user: User) -> None:
+        """品質管理部は月次報告書を閲覧のみ（API設計書 §4 の権限マトリクス）。
+
+        permitted_property_ids は QA に全物件を許すため、物件スコープだけでは
+        生成・編集・承認を止められない。ロールによる操作制限はここで明示的に強制する。
+        """
+        if user.is_qa:
+            raise PermissionDeniedError(
+                "品質管理部は月次報告書を閲覧のみ可能です（生成・編集・承認は支店管理者の操作です）"
+            )
+
     async def request_generation(self, user: User, property_id: int, month: date) -> MonthlyReport:
         """新しい生成ジョブを登録（status=generating・version+1）して即返す。
 
         month は月初に正規化して保存。範囲外物件は PermissionDenied（→403）。
         """
+        self._deny_qa_writes(user)
         first_of_month = month.replace(day=1)
         permitted = await self._permissions.permitted_property_ids(user)
         report = await self._repo.create_generating(property_id, first_of_month, permitted)
@@ -97,8 +106,14 @@ class MonthlyService:
         permitted = await self._permissions.permitted_property_ids(user)
         return await self._repo.get(monthly_id, permitted)
 
+    async def list_for_user(self, user: User, limit: int = LIST_LIMIT) -> list[MonthlyReport]:
+        """権限内の月次報告書一覧（画面用）。QA も閲覧はできる。"""
+        permitted = await self._permissions.permitted_property_ids(user)
+        return await self._repo.list_reports(permitted, limit)
+
     async def save_draft(self, user: User, monthly_id: int, body_markdown: str) -> MonthlyReport:
         """draft の本文を人手修正して保存。approved 後や生成中の編集は拒否（→422）。"""
+        self._deny_qa_writes(user)
         permitted = await self._permissions.permitted_property_ids(user)
         report = await self._repo.get(monthly_id, permitted)
         if report.status is not MonthlyStatus.DRAFT:
@@ -109,6 +124,7 @@ class MonthlyService:
 
     async def approve(self, user: User, monthly_id: int) -> MonthlyReport:
         """draft を承認して確定。承認は監査ログに記録する（09 §6）。"""
+        self._deny_qa_writes(user)
         permitted = await self._permissions.permitted_property_ids(user)
         report = await self._repo.get(monthly_id, permitted)
         if report.status is not MonthlyStatus.DRAFT:

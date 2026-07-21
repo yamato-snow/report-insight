@@ -11,7 +11,7 @@
 
 ```mermaid
 graph LR
-    subgraph PR時（すべて必須チェック）
+    subgraph pr["PR時（すべて必須チェック）"]
         A[静的検査<br>ruff / mypy / import-linter] --> B[シークレット検出<br>gitleaks]
         B --> C[SAST<br>ruff S + bandit]
         C --> D[SCA<br>pip-audit]
@@ -19,12 +19,12 @@ graph LR
         F --> G{prompts/ 変更?}
         G -->|Yes| H[LLM回帰評価]
     end
-    subgraph main マージ後
+    subgraph post["main マージ後"]
         I[Docker build] --> J[イメージスキャン<br>Trivy + SBOM生成]
         J --> K[ECR push] --> L[dev デプロイ] --> M[スモークテスト]
         M --> N{手動承認} --> O[prod デプロイ]
     end
-    PR時 --> I
+    pr --> I
 ```
 
 ## 2. セキュリティゲート一覧（DevSecOps）

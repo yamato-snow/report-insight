@@ -1,0 +1,76 @@
+/* 管理系画面の共通スタイル（SSR + HTMX。ビルド工程を持たないので単一の素の CSS）。 */
+
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+
+body {
+  font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif;
+  margin: 0; padding: 24px; max-width: 1100px; margin-inline: auto; line-height: 1.6;
+}
+
+h1 { font-size: 1.25rem; margin: 0 0 4px; }
+h2 { font-size: 1rem; margin: 20px 0 8px; }
+h3 { font-size: .9rem; margin: 18px 0 6px; }
+.sub { color: #888; font-size: .85rem; margin: 0 0 20px; }
+.muted { color: #888; font-size: .85rem; }
+.ok { color: #059669; font-weight: 600; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+
+label { font-size: .75rem; color: #888; display: block; margin-bottom: 2px; }
+select, input, textarea {
+  padding: 6px 8px; border: 1px solid #8886; border-radius: 6px;
+  background: transparent; color: inherit; font-size: .9rem; font-family: inherit;
+}
+button {
+  padding: 7px 14px; border: 0; border-radius: 6px; cursor: pointer;
+  background: #2563eb; color: #fff; font-size: .9rem; font-family: inherit;
+}
+button.secondary { background: #6b7280; }
+button.approve { background: #059669; }
+button:disabled { background: #9ca3af; cursor: not-allowed; }
+a { color: #2563eb; }
+
+.topbar {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  flex-wrap: wrap; border-bottom: 1px solid #8883; padding-bottom: 10px; margin-bottom: 18px;
+}
+.nav { display: flex; gap: 14px; font-size: .9rem; }
+.nav a.active { font-weight: 700; text-decoration: none; }
+.whoami { font-size: .8rem; color: #888; display: flex; align-items: center; gap: 8px; }
+
+.tabs { margin: 18px 0 10px; display: flex; gap: 8px; }
+.tabs button { background: #6b7280; }
+.tabs button.on { background: #2563eb; }
+
+table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: .85rem; }
+th, td { border-bottom: 1px solid #8883; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { color: #888; font-weight: 600; }
+tbody tr.clickable:hover { background: #2563eb18; cursor: pointer; }
+
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem; }
+.u-high { background: #dc2626; color: #fff; }
+.u-medium { background: #d97706; color: #fff; }
+.u-low { background: #4b5563; color: #fff; }
+.s-needs_review { color: #dc2626; font-weight: 600; }
+.s-human_verified { color: #059669; font-weight: 600; }
+.s-failed { color: #dc2626; }
+
+.pager { display: flex; gap: 8px; align-items: center; margin-top: 14px; font-size: .85rem; }
+
+/* 報告書の詳細ペイン */
+.detail { border: 1px solid #8884; border-radius: 8px; padding: 16px 18px; margin-top: 20px; }
+.detail-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.detail-head h2 { margin: 0; }
+.rawtext { border: 1px solid #8883; border-radius: 6px; padding: 12px 14px; white-space: pre-wrap; }
+
+/* 月次報告書 */
+.editor { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.editor textarea { width: 100%; min-height: 420px; font-family: ui-monospace, monospace; font-size: .8rem; }
+.preview { border: 1px solid #8883; border-radius: 6px; padding: 12px 16px; overflow: auto; min-height: 420px; }
+@media (max-width: 780px) { .editor { grid-template-columns: 1fr; } }
+
+.banner { padding: 10px 14px; border-radius: 6px; font-size: .85rem; margin: 12px 0; }
+.banner.info { background: #2563eb22; }
+.banner.ok { background: #05966922; }
+.banner.warn { background: #d9770622; }
+.banner.deny { background: #dc262622; }

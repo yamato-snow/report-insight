@@ -36,8 +36,17 @@ class TokenEvent(BaseModel):
 
 
 class DoneEvent(BaseModel):
+    """完了イベント。
+
+    非機能要件（要件定義 §6「検索応答3秒以内（LLM生成部はストリーミング表示）」）が
+    対象にするのは**利用者が読み始められるまで**なので、その指標として first_token_ms を
+    正とする。latency_ms（生成完了まで）は回答長に比例して伸びるため、別枠で持つ。
+    """
+
     citations: list[int]
     latency_ms: int
+    first_token_ms: int
+    retrieval_ms: int
     input_tokens: int
     output_tokens: int
 
@@ -79,6 +88,7 @@ class SearchService:
         permitted = await self._repo.permitted_property_ids(user)
         query_vec = await self._embedder.embed_query(query)
         hits = await self._repo.hybrid_search(query_vec, filters, permitted, SEARCH_TOP_K)
+        retrieval_ms = int((time.perf_counter() - started) * 1000)
 
         self._metrics.incr("search_total")
         if not hits:
@@ -100,8 +110,11 @@ class SearchService:
         )
 
         parts: list[str] = []
+        first_token_ms = 0
         stream = self._llm.stream_answer(query, hits)
         async for token in stream:
+            if not parts:  # 最初のトークン＝利用者が読み始められた瞬間
+                first_token_ms = int((time.perf_counter() - started) * 1000)
             parts.append(token)
             yield TokenEvent(text=token)
 
@@ -122,12 +135,16 @@ class SearchService:
             hits=len(hits),
             citations=len(valid),
             latency_ms=latency_ms,
+            first_token_ms=first_token_ms,
+            retrieval_ms=retrieval_ms,
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
         )
         yield DoneEvent(
             citations=sorted(valid),
             latency_ms=latency_ms,
+            first_token_ms=first_token_ms,
+            retrieval_ms=retrieval_ms,
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
         )
