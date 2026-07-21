@@ -2,7 +2,7 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help setup up down down-v migrate demo test test-integration test-pdf eval eval-loop scenario lint fmt shell logs
+.PHONY: help setup up down down-v migrate demo test test-integration test-pdf check-mermaid eval eval-loop scenario lint fmt shell logs
 
 help: ## このヘルプを表示
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -42,6 +42,10 @@ eval-loop: ## 劣化検知→改善フローの閉ループ実証（実APIなし
 
 scenario: ## 受入シナリオ（実APIなし・決定的・課金ゼロ）。NAME=xxx で1本に絞る
 	uv run python -m tests.scenarios.run $(if $(NAME),--name $(NAME),)
+
+check-mermaid: ## docs の Mermaid 図が GitHub で描画できるか検証（要 node）
+	npm install --no-save --silent mermaid@11
+	node scripts/check_mermaid.mjs
 
 test-pdf: ## PDFの日本語描画テスト（WeasyPrintのネイティブ依存があるコンテナ内で実行）
 	$(COMPOSE) run --rm api uv run --with pytest --with pytest-asyncio \
