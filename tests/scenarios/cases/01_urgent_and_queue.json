@@ -1,0 +1,24 @@
+{
+  "name": "緊急案件は即通知され、AIが迷った報告は人の確認キューに回る",
+  "requirements": ["F-1-2", "F-1-4", "F-1-5"],
+  "description": "現場からの報告が分類され、緊急度の高いものは通知、確信度の低いものは未分類キューへ振り分けられることを確認する。",
+  "inputs": [
+    {
+      "text": "地下1階の配管から漏水しています。床が濡れて危険なため止水しました。",
+      "expect": { "category": "equipment_failure", "urgency": "high", "notified": true, "queued": false }
+    },
+    {
+      "text": "1階から3階の共用部の清掃を実施しました。ゴミの回収も完了し、異常はありません。",
+      "expect": { "category": "cleaning", "urgency": "low", "notified": false, "queued": false }
+    },
+    {
+      "text": "7階入居者より、隣室の騒音について苦情がありました。夜間の物音とのことです。",
+      "expect": { "category": "claim", "urgency": "low", "notified": false, "queued": false }
+    },
+    {
+      "text": "状況は曖昧で不明な点が多く、判断に迷います。",
+      "expect": { "queued": true, "notified": false }
+    }
+  ],
+  "expect_overall": { "lost": 0, "notified": 1, "queued": 1 }
+}

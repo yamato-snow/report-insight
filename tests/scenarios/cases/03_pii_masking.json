@@ -1,0 +1,12 @@
+{
+  "name": "個人情報はAIに送る前にマスキングされる",
+  "requirements": ["非機能: PIIマスキング"],
+  "description": "現場の自由記述に電話番号やメールアドレスが含まれていても、LLM へ送るテキストからは伏字化されることを確認する（LLM設計書 §3）。原文はそのまま保存されるが、AIへの送信内容はマスク後になる。",
+  "inputs": [
+    {
+      "text": "入居者の田中様（電話 090-1234-5678、メール tanaka@example.com）から設備の不具合について連絡がありました。",
+      "expect": { "category": "equipment_failure", "masked_sent_to_llm": true, "pii_absent_in_llm_input": ["090-1234-5678", "tanaka@example.com"] }
+    }
+  ],
+  "expect_overall": { "lost": 0 }
+}
