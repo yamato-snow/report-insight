@@ -1,0 +1,4 @@
+# cp terraform.tfvars.example terraform.tfvars して使う（*.tfvars は .gitignore 対象）。
+# account_id は公開リポジトリに実値を置かない。次のコマンドで取得して貼る:
+#   aws sts get-caller-identity --query Account --output text
+account_id = "000000000000"

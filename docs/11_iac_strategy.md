@@ -37,6 +37,49 @@ terraform/
 | 分離単位 | env ごとに別 state（dev の破壊操作が prod に波及しない） |
 | アクセス | state バケットは CI ロールと管理者のみ。state には機微値が入り得るため閲覧権限も絞る |
 
+### 2.1 bootstrap ルート（state 保管先そのものの作成）
+
+state バケットを main の Terraform（`envs/*`）で管理すると「state を作るのに state が要る」
+循環になる。そのため保管先の作成だけを `terraform/bootstrap/` に切り出し、**backend を
+指定しない独立ルート（local state）**として扱う。
+
+| リソース | 名前 | 設定 |
+|---|---|---|
+| S3 バケット | `ri-tfstate-<account_id>` | バージョニング有効・SSE(AES256)・public access block 全4項目 true |
+| DynamoDB テーブル | `ri-tflock` | PAY_PER_REQUEST・hash_key `LockID` |
+
+バケット名はグローバル一意である必要があるためアカウント ID を付す（`account_id` は
+変数で受け `terraform.tfvars` に固定。tfvars は .gitignore 対象なので
+`terraform.tfvars.example` を雛形として置く）。両リソースとも `prevent_destroy = true`（§9）。
+
+> **アカウント ID をリポジトリに書かない。** 本リポジトリは公開のため、state バケット名
+> （＝アカウント ID を含む）は `envs/*/backend.tf` に直書きせず**部分設定**にしてある。
+> 実値は `backend.hcl`（.gitignore 対象）または `-backend-config` で初期化時に渡す。
+
+**初回手順**（一度だけ。CI からは実行しない）:
+
+```bash
+cd terraform/bootstrap
+cp terraform.tfvars.example terraform.tfvars   # account_id を自アカウントに合わせる
+terraform init && terraform plan               # 期待: S3系 + DynamoDB の add のみ
+terraform apply
+
+# 各 env の backend 設定を用意（コミットしない）
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+for env in dev prod; do
+  echo "bucket = \"ri-tfstate-${ACCOUNT_ID}\"" > ../envs/$env/backend.hcl
+done
+
+# 続いて各 env を新バケットに向け直す
+terraform -chdir=../envs/dev  init -reconfigure -backend-config=backend.hcl
+terraform -chdir=../envs/prod init -reconfigure -backend-config=backend.hcl
+```
+
+- bootstrap の local state（`terraform.tfstate`）は**コミットしない**。紛失時は
+  既存リソースを `terraform import` して取り込む（§7 の例外運用）
+- 実行者には `s3:CreateBucket` / `dynamodb:CreateTable` を含む管理者相当の権限が要る。
+  アプリ実行用の IAM ユーザーでは権限不足で失敗する
+
 ## 3. 環境戦略
 
 | 環境 | 構成 | コスト方針 |

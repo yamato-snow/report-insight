@@ -18,6 +18,8 @@ __pycache__/
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+# backend の部分設定（state バケット名にアカウントIDを含むため公開しない）
+backend.hcl
 
 # OS / editor
 .DS_Store
