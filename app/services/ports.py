@@ -117,6 +117,28 @@ class NullMetrics:
 NULL_METRICS: MetricsPort = NullMetrics()
 
 
+class TextNormalizerPort(Protocol):
+    """表記ゆれ正規化。分類前にテキストを正規形へ揃える。"""
+
+    def normalize(self, text: str) -> str:
+        """表記ゆれを正規形へ置換した文字列を返す（決定的・副作用なし）。"""
+        ...
+
+
+class NullNormalizer:
+    """何もしない TextNormalizerPort（Null Object）。
+
+    対応表が未設定（NORMALIZER_CORRECTIONS_PATH なし）のときの既定値。無変換なので
+    配線前と完全に同じ挙動になる（対応表は運用還流で蓄積する前提）。
+    """
+
+    def normalize(self, text: str) -> str:
+        return text
+
+
+NULL_NORMALIZER: TextNormalizerPort = NullNormalizer()
+
+
 class ReportRepository(Protocol):
     """報告書・構造化結果の永続化。認可は permitted_property_ids で強制（DB設計書 §2）。"""
 

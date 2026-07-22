@@ -10,6 +10,7 @@ from app.domain.errors import RetryableError
 from app.domain.values import AnalysisStatus, Category, Urgency
 from app.infra.embedding.fake_client import FakeEmbeddingClient
 from app.infra.llm.fake_client import FakeLLMClient
+from app.infra.text.normalize import TextNormalizer
 from app.services.ingest import IngestService, parse_s3_event
 from tests.unit.fakes import (
     FakeMasker,
@@ -40,7 +41,9 @@ def _service(
     *,
     llm=None,
     metrics: FakeMetrics | None = None,
+    normalizer=None,
 ):
+    kwargs = {} if normalizer is None else {"normalizer": normalizer}
     return IngestService(
         storage=storage,
         masker=FakeMasker(),
@@ -50,6 +53,7 @@ def _service(
         notifier=notifier,
         metrics=metrics or FakeMetrics(),
         confidence_threshold=0.85,
+        **kwargs,
     )
 
 
@@ -109,6 +113,63 @@ async def test_ingest_boundary_cleaning_with_breakage_is_equipment() -> None:
 
     _, analysis, _ = repo.saved[0]
     assert analysis.category is Category.EQUIPMENT_FAILURE
+
+
+class _RecordingLLM:
+    """分類器に実際に渡されたテキストを記録する Fake（正規化の適用点の検証用）。"""
+
+    def __init__(self) -> None:
+        self._inner = FakeLLMClient()
+        self.seen: list[str] = []
+
+    async def classify_report(self, masked_text: str):
+        self.seen.append(masked_text)
+        return await self._inner.classify_report(masked_text)
+
+    def stream_answer(self, query, sources):  # pragma: no cover - 取込では未使用
+        raise NotImplementedError
+
+    async def narrate_monthly(self, *, property_name, stats):  # pragma: no cover
+        raise NotImplementedError
+
+
+async def test_ingest_normalizes_text_before_classification_but_keeps_raw_text() -> None:
+    """マスキング後・分類前に正規化が効き、保存される raw_text は原文のまま（原本性維持）。"""
+    raw = "3階廊下でろうすいが発生。至急対応願います。"
+    storage = FakeStorage({"reports/a.json": _message(raw)})
+    repo = FakeReportRepository()
+    notifier = FakeNotifier()
+    llm = _RecordingLLM()
+
+    outcome = await _service(
+        storage,
+        repo,
+        notifier,
+        llm=llm,
+        normalizer=TextNormalizer({"ろうすい": "漏水"}),
+    ).ingest_from_key("reports/a.json")
+
+    # 分類器には正規化済みテキストが渡る
+    assert llm.seen == ["3階廊下で漏水が発生。至急対応願います。"]
+    # 原文は無傷で保存される
+    report, _, _ = repo.saved[0]
+    assert report.raw_text == raw
+    # 正規化により表記ゆれが分類の手掛かりに戻る（「ろうすい」単体では緊急と判定されない）
+    assert outcome.notified is True
+
+
+async def test_ingest_without_normalizer_passes_masked_text_unchanged() -> None:
+    """既定（対応表未設定）は無変換で、配線前と同じテキストが分類器に渡る。"""
+    raw = "3階廊下でろうすいが発生。至急対応願います。"
+    storage = FakeStorage({"reports/a.json": _message(raw)})
+    llm = _RecordingLLM()
+
+    outcome = await _service(
+        storage, FakeReportRepository(), FakeNotifier(), llm=llm
+    ).ingest_from_key("reports/a.json")
+
+    assert llm.seen == [raw]
+    assert outcome.notified is False
 
 
 class _RaisingLLM:

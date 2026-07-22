@@ -19,6 +19,7 @@ from app.domain.errors import RetryableError
 from app.domain.values import LONG_TEXT_CHARS, AnalysisStatus, Urgency
 from app.services.ports import (
     NULL_METRICS,
+    NULL_NORMALIZER,
     EmbeddingClient,
     LLMClient,
     MetricsPort,
@@ -26,6 +27,7 @@ from app.services.ports import (
     ObjectStoragePort,
     PIIMaskerPort,
     ReportRepository,
+    TextNormalizerPort,
 )
 
 logger = get_logger(__name__)
@@ -55,6 +57,7 @@ class IngestService:
         notifier: NotificationPort,
         confidence_threshold: float,
         metrics: MetricsPort = NULL_METRICS,
+        normalizer: TextNormalizerPort = NULL_NORMALIZER,
     ) -> None:
         self._storage = storage
         self._masker = masker
@@ -63,6 +66,7 @@ class IngestService:
         self._repo = repository
         self._notifier = notifier
         self._metrics = metrics
+        self._normalizer = normalizer
         self._threshold = confidence_threshold
 
     async def ingest_from_key(self, source_key: str) -> IngestOutcome:
@@ -78,10 +82,13 @@ class IngestService:
 
         # PIIマスキング後のテキストのみ LLM API に送る（LLM設計書 §3）
         masked = await self._masker.mask(message.raw_text)
+        # 表記ゆれを正規形へ揃えてから分類する（「ろうすい」→「漏水」等）。
+        # raw_text は原文のまま保存する（原本性維持。正規化は分類入力にのみ効かせる）。
+        classify_text = self._normalizer.normalize(masked.masked_text)
         # LLM 障害（RetryableError）と構造化の失敗（パース/スキーマ不一致）を別カウンタで送出。
         # 前者は runbook §2（縮退ラダー）、後者は §3（構造化失敗率）の一次対応に対応する。
         try:
-            envelope = await self._llm.classify_report(masked.masked_text)
+            envelope = await self._llm.classify_report(classify_text)
         except RetryableError:
             self._metrics.incr("llm_error")
             raise
