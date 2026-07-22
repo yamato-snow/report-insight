@@ -15,6 +15,7 @@ from app.domain.entities import (
     MonthlyStats,
     SearchHit,
 )
+from app.domain.labels import CATEGORY_JP
 from app.domain.values import Category, Urgency
 from app.infra.llm.prompts import load_prompt
 
@@ -85,7 +86,8 @@ class FakeLLMClient:
         else:
             lead = f"{property_name}では当月{stats.total}件の報告がありました。"
             if top_category is not None and top_category[1] > 0:
-                lead += f"最多の分類は「{top_category[0].value}」で{top_category[1]}件でした。"
+                cat_label = CATEGORY_JP[top_category[0]]
+                lead += f"最多の分類は「{cat_label}」で{top_category[1]}件でした。"
             if stats.action_required > 0:
                 lead += f"うち{stats.action_required}件が要対応であり、優先的な確認が必要です。"
             body = lead

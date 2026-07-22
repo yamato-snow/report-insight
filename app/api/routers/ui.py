@@ -180,9 +180,15 @@ function handleEvent(chunk, onToken) {
   } else if (ev === 'done') {
     const c = (payload.citations || []).map(id =>
       '<span class="cite">report:' + id + '</span>').join(' ') || '—';
+    // 非機能要件(3秒)の対象は「読み始められるまで」= first_token_ms。基準超過は赤で示す。
+    const ftt = payload.first_token_ms ?? null;
+    const slow = ftt !== null && ftt > 3000;
     $('#meta').innerHTML =
       '<span>引用: ' + c + '</span>' +
-      '<span><b>' + (payload.latency_ms ?? '—') + '</b> ms</span>' +
+      '<span>検索 <b>' + (payload.retrieval_ms ?? '—') + '</b> ms</span>' +
+      '<span' + (slow ? ' class="err"' : '') + '>初回表示 <b>' + (ftt ?? '—') + '</b> ms' +
+        (slow ? ' ⚠ 基準3秒超' : '') + '</span>' +
+      '<span>生成完了 <b>' + (payload.latency_ms ?? '—') + '</b> ms</span>' +
       '<span>in <b>' + (payload.input_tokens ?? '—') + '</b> tok</span>' +
       '<span>out <b>' + (payload.output_tokens ?? '—') + '</b> tok</span>';
   } else if (ev === 'error') {

@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>データの流れを検証する（検査用） — モック</title>
+<link rel="stylesheet" href="mock.css">
+<style>
+  .flow { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; margin: 16px 0; }
+  .stage {
+    flex: 1 1 150px; border: 1px solid #8884; border-radius: 8px; padding: 10px 12px;
+    position: relative; transition: background .3s, border-color .3s;
+  }
+  .stage.active { border-color: #2563eb; background: #2563eb18; }
+  .stage.done { border-color: #059669; }
+  .stage .name { font-size: .8rem; color: #888; }
+  .stage .count { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+  .stage .note { font-size: .7rem; color: #888; }
+  .arrow { align-self: center; color: #888; font-size: 1.2rem; }
+  .branches { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .branch { flex: 1 1 180px; border-radius: 8px; padding: 10px 12px; border: 1px solid #8884; }
+  .branch.notify { border-color: #dc2626; }
+  .branch.queue { border-color: #d97706; }
+  .branch.dlq { border-color: #7c3aed; }
+  .branch .count { font-size: 1.4rem; font-weight: 700; }
+  .thresholds td { font-size: .85rem; }
+  .ok-mark { color: #059669; font-weight: 700; }
+  .ng-mark { color: #dc2626; font-weight: 700; }
+</style>
+</head>
+<body>
+<script src="mock-data.js"></script>
+
+<h1>データの流れを検証する <span class="mockflag">検査用</span></h1>
+<p class="sub">
+  現場の報告書が<strong>どこを通って画面に出てくるのか</strong>、途中で失敗したらどうなるのかを目で見る画面です。
+</p>
+
+<div class="banner warn">
+  <strong>これは製品の機能ではありません。</strong>
+  本番のデータ投入は「既存の報告システム → S3（日次） → SQS → 構造化ワーカー → DB」という
+  <strong>裏側の自動処理</strong>で、人が見る画面はありません。
+  この画面はその流れを可視化して、受入テストで<strong>詰まりや取りこぼしが無いかを確認する</strong>ための治具です。
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">日次バッチを流す</h2>
+  <div class="row">
+    <div>
+      <label>投入件数</label>
+      <select id="count">
+        <option value="20">20件（さっと確認）</option>
+        <option value="100" selected>100件（本番の想定日次に近い）</option>
+        <option value="400">400件（要件どおりの1日分）</option>
+      </select>
+    </div>
+    <div>
+      <label>異常を混ぜる</label>
+      <select id="faults">
+        <option value="none">混ぜない（正常系）</option>
+        <option value="some" selected>少し混ぜる（LLMエラー数件）</option>
+        <option value="many">多く混ぜる（監視アラートが出るはず）</option>
+      </select>
+    </div>
+    <button id="runBtn" onclick="run()">バッチを流す</button>
+    <button class="secondary" onclick="location.href='admin.html'">報告書一覧で結果を見る</button>
+  </div>
+  <p class="muted" style="margin:10px 0 0">
+    流したデータは実際に「報告書」一覧に入ります。緊急度が高いものは通知対象、
+    AIが迷ったものは未分類キューへ回ります。
+  </p>
+</div>
+
+<h2>処理の流れ</h2>
+<div class="flow" id="flow"></div>
+<div class="branches" id="branches"></div>
+
+<div id="summary"></div>
+<div id="dlqBox"></div>
+
+<script>
+renderTopbar("pipeline");
+
+const STAGES = [
+  { key: "s3", name: "① S3に到着", note: "既存システムが日次で置く" },
+  { key: "sqs", name: "② SQSに積む", note: "1件ずつのメッセージに分解" },
+  { key: "worker", name: "③ ワーカーが処理", note: "AIが分類・要約" },
+  { key: "db", name: "④ DBに保存", note: "画面に出るのはここから" },
+];
+
+const BODIES = [
+  "3階廊下の巡回を実施しました。床の清掃とゴミの回収を行い、特に異常はありませんでした。",
+  "地下1階の配管から水漏れが発生しています。床が濡れて危険なため止水し、業者に連絡しました。",
+  "エレベーター2号機が3階で停止しました。閉じ込めはありません。保守会社が対応中です。",
+  "7階テナント様より、空調がうるさいというご意見をいただきました。低い音が響いています。",
+  "共用部のガラス清掃とワックスがけを実施しました。破損等はありません。",
+  "屋上の排水溝に落ち葉がたまっています。台風が来たら詰まるかもしれません。判断がつかないので確認をお願いします。",
+  "1階と2階のトイレの清掃を行いました。備品を補充し、ゴミの回収も完了しています。",
+  "駐車場の照明が1本切れています。歩行に支障はありませんが、照明の不具合として交換が必要です。",
+];
+// 8件中1件（12.5%）だけがAIの迷う文面。本番でも未分類への回送は少数にとどまる想定。
+
+let state = null;
+
+function blankState() {
+  return { s3: 0, sqs: 0, worker: 0, db: 0, notify: 0, queue: 0, dlq: 0, total: 0, dlqItems: [], running: false };
+}
+
+function render() {
+  const s = state || blankState();
+  document.getElementById("flow").innerHTML = STAGES.map((st, i) => `
+    ${i > 0 ? '<div class="arrow">→</div>' : ""}
+    <div class="stage ${s.running && s[st.key] > 0 && s[st.key] < s.total ? "active" : s[st.key] > 0 ? "done" : ""}">
+      <div class="name">${st.name}</div>
+      <div class="count">${s[st.key]}</div>
+      <div class="note">${st.note}</div>
+    </div>`).join("");
+
+  document.getElementById("branches").innerHTML = `
+    <div class="branch notify">
+      <div class="name">緊急通知（Slack）</div>
+      <div class="count">${s.notify}</div>
+      <div class="note">緊急度「高」を即時通知（F-1-4）</div>
+    </div>
+    <div class="branch queue">
+      <div class="name">未分類キューへ回送</div>
+      <div class="count">${s.queue}</div>
+      <div class="note">AIが自信を持てず人に回した（F-1-5）</div>
+    </div>
+    <div class="branch dlq">
+      <div class="name">失敗（DLQ行き）</div>
+      <div class="count">${s.dlq}</div>
+      <div class="note">処理できず退避。取りこぼし監視対象</div>
+    </div>`;
+}
+
+function run() {
+  const total = Number(document.getElementById("count").value);
+  const faultMode = document.getElementById("faults").value;
+  const failRate = faultMode === "none" ? 0 : faultMode === "some" ? 0.03 : 0.15;
+
+  state = blankState();
+  state.total = total;
+  state.running = true;
+  document.getElementById("runBtn").disabled = true;
+  document.getElementById("summary").innerHTML = "";
+  document.getElementById("dlqBox").innerHTML = "";
+  render();
+
+  // 段階を順に進める。実際の処理時間の代わりに刻んで見せる
+  const step = Math.max(1, Math.round(total / 25));
+  let phase = 0;
+
+  const timer = setInterval(() => {
+    if (phase === 0) {
+      state.s3 = Math.min(total, state.s3 + step * 3);
+      if (state.s3 >= total) phase = 1;
+    } else if (phase === 1) {
+      state.sqs = Math.min(total, state.sqs + step * 3);
+      if (state.sqs >= total) phase = 2;
+    } else if (phase === 2) {
+      const n = Math.min(step, total - state.worker);
+      for (let i = 0; i < n; i++) processOne(failRate);
+      state.worker += n;
+      if (state.worker >= total) phase = 3;
+    } else {
+      clearInterval(timer);
+      state.running = false;
+      document.getElementById("runBtn").disabled = false;
+      saveState(State);
+      render();
+      showSummary(failRate);
+      return;
+    }
+    render();
+  }, 60);
+}
+
+function processOne(failRate) {
+  const idx = Math.floor((state.worker + state.db) % BODIES.length);
+  const text = BODIES[idx];
+  const prop = PROPERTIES[(state.worker + state.db) % PROPERTIES.length];
+
+  // 一定確率で「LLM呼び出し失敗」→ リトライも尽きて DLQ へ
+  if (Math.random() < failRate) {
+    state.dlq++;
+    state.dlqItems.push({
+      property: prop.name,
+      text: text.slice(0, 30) + "…",
+      error: "LLM API がタイムアウトしました（3回リトライ後に退避）",
+    });
+    return;
+  }
+
+  const day = 10 + (state.db % 8);
+  const rec = submitReport(prop.id, text, `2026-07-${String(day).padStart(2, "0")} 09:00`);
+  state.db++;
+  if (rec.urgency === "high") state.notify++;
+  if (rec.status === "needs_review") state.queue++;
+}
+
+function showSummary(failRate) {
+  const s = state;
+  const failPct = s.total ? (s.dlq / s.total) * 100 : 0;
+  const queuePct = s.db ? (s.queue / s.db) * 100 : 0;
+
+  const check = (ok, label) => `<span class="${ok ? "ok-mark" : "ng-mark"}">${ok ? "OK" : "要確認"}</span> ${label}`;
+
+  document.getElementById("summary").innerHTML = `
+    <h2>結果</h2>
+    <div class="card">
+      <table>
+        <tr><th style="width:220px">投入した報告書</th><td>${s.total} 件</td></tr>
+        <tr><th>画面に出るようになった</th><td>${s.db} 件</td></tr>
+        <tr><th>緊急通知を送った</th><td>${s.notify} 件（本番ではSlackに飛びます）</td></tr>
+        <tr><th>人の確認へ回した</th><td>${s.queue} 件（${queuePct.toFixed(1)}%）</td></tr>
+        <tr><th>処理できず退避した</th><td>${s.dlq} 件（${failPct.toFixed(1)}%）</td></tr>
+        <tr><th>取りこぼし</th><td>${s.db + s.dlq === s.total
+          ? '<span class="ok-mark">なし</span>（保存＋退避 ＝ 投入件数）'
+          : '<span class="ng-mark">あり</span>'}</td></tr>
+      </table>
+    </div>
+
+    <h2>監視のしきい値との照合</h2>
+    <p class="muted">基本設計 §4 で決めたアラート条件に触れていないかを確認します。</p>
+    <div class="card">
+      <table class="thresholds">
+        <tr><th style="width:280px">構造化失敗率 &gt; 10%</th>
+            <td>${check(failPct <= 10, `実測 ${failPct.toFixed(1)}%`)}</td></tr>
+        <tr><th>DLQ に1件でも残っている</th>
+            <td>${check(s.dlq === 0, `実測 ${s.dlq} 件`)}</td></tr>
+        <tr><th>未分類への回送が多すぎないか（目安20%）</th>
+            <td>${check(queuePct <= 20, `実測 ${queuePct.toFixed(1)}%`)}</td></tr>
+      </table>
+      ${s.dlq > 0 ? '<div class="banner warn" style="margin-bottom:0">DLQ に残っているものは<strong>誰かが気づいて再処理しない限り永久に画面に出ません。</strong>運用でここを監視する必要があります。</div>' : ""}
+    </div>`;
+
+  if (s.dlq > 0) {
+    document.getElementById("dlqBox").innerHTML = `
+      <h2>退避された報告書（DLQ）</h2>
+      <p class="muted">原因を取り除いてから再処理します。実運用ではこの操作をランブックに書いておきます。</p>
+      <table>
+        <thead><tr><th>物件</th><th>内容</th><th>エラー</th></tr></thead>
+        <tbody>${s.dlqItems.map(d => `
+          <tr><td>${d.property}</td><td>${d.text}</td><td>${d.error}</td></tr>`).join("")}</tbody>
+      </table>
+      <div class="row" style="margin-top:12px">
+        <button onclick="retryDlq()">DLQ をまとめて再処理する</button>
+      </div>`;
+  }
+}
+
+function retryDlq() {
+  const items = state.dlqItems.slice();
+  state.dlqItems = [];
+  state.dlq = 0;
+  items.forEach((d, i) => {
+    const prop = PROPERTIES.find(p => p.name === d.property) || PROPERTIES[0];
+    const rec = submitReport(prop.id, BODIES[i % BODIES.length], "2026-07-19 09:00");
+    state.db++;
+    if (rec.urgency === "high") state.notify++;
+    if (rec.status === "needs_review") state.queue++;
+  });
+  saveState(State);
+  render();
+  showSummary(0);
+  document.getElementById("dlqBox").innerHTML =
+    '<div class="banner ok">DLQ を再処理しました。退避されていた報告書も画面に出るようになりました。</div>';
+}
+
+render();
+</script>
+</body>
+</html>

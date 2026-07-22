@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report Insight — 監査ログ</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  {% include "_topbar.html" %}
+
+  <h1>監査ログ</h1>
+  <p class="sub">
+    分類の上書き（F-4-4）と月次報告書の承認（F-4-3）の記録です。追記のみで、書き換え・削除はできません。
+  </p>
+
+  {% if not entries %}
+  <p class="muted">まだ記録がありません。分類を直すか、月次報告書を承認すると、ここに残ります。</p>
+  {% else %}
+  <table>
+    <thead>
+      <tr><th>日時</th><th>操作した人</th><th>操作</th><th>内容</th></tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+      <tr>
+        <td>{{ e.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+        <td>{{ e.actor_email }}</td>
+        <td>{{ action_labels.get(e.action.value, e.action.value) }}</td>
+        <td>
+          {% for k, v in e.payload.items() %}{{ k }}={{ v }}{% if not loop.last %} / {% endif %}{% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</body>
+</html>

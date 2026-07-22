@@ -11,6 +11,7 @@ from datetime import date, datetime
 from typing import Protocol, runtime_checkable
 
 from app.domain.entities import (
+    AuditEntry,
     ClassificationEnvelope,
     LLMCallMeta,
     MaskingResult,
@@ -250,6 +251,12 @@ class MonthlyReportRepository(Protocol):
         """権限内の月次報告書を1件取得。不在/範囲外は NotFound/PermissionDenied。"""
         ...
 
+    async def list_reports(
+        self, permitted_property_ids: Sequence[int], limit: int
+    ) -> list[MonthlyReport]:
+        """権限内の月次報告書を新しい順に返す（画面の一覧用）。"""
+        ...
+
     async def get_internal(self, monthly_id: int) -> MonthlyReport:
         """生成ジョブ（システム実行・認可なし）用の取得。API から直接は使わない。"""
         ...
@@ -271,6 +278,10 @@ class AuditPort(Protocol):
     """監査ログの記録（検索・承認・分類上書き。DB設計書 04 / 09 §6）。"""
 
     async def record(self, *, user_id: int, action: str, payload: dict[str, object]) -> None: ...
+
+    async def list_recent(self, limit: int) -> list[AuditEntry]:
+        """新しい順の監査ログ（受入条件の確認用の参照系）。"""
+        ...
 
 
 class PdfRendererPort(Protocol):

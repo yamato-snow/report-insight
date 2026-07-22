@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>月次報告書の編集・承認 — モック</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<script src="mock-data.js"></script>
+
+<div id="page"></div>
+
+<script>
+renderTopbar("monthly");
+
+const id = Number(new URLSearchParams(location.search).get("id"));
+const rec = State.monthly.find(m => m.id === id);
+const u = currentUser();
+
+function render() {
+  if (!rec) {
+    document.getElementById("page").innerHTML =
+      '<h1>月次報告書</h1><div class="banner deny">対象の報告書が見つかりません。' +
+      '<a href="monthly-list.html">一覧へ戻る</a></div>';
+    return;
+  }
+  if (!permittedProperties(u).some(p => p.id === rec.property_id)) {
+    document.getElementById("page").innerHTML =
+      '<h1>月次報告書</h1><div class="banner deny">この物件は権限の範囲外です（本番では 403 が返ります）。' +
+      '<a href="monthly-list.html">一覧へ戻る</a></div>';
+    return;
+  }
+
+  const approved = rec.status === "approved";
+  const canApprove = !isQa(u);
+
+  document.getElementById("page").innerHTML = `
+    <div class="spread">
+      <h1 style="margin:0">${propertyName(rec.property_id)}（${rec.month}） <span class="mockflag">MOCK</span></h1>
+      <a href="monthly-list.html">一覧へ戻る</a>
+    </div>
+    <p class="sub">状態: <strong class="${approved ? "s-human_verified" : ""}">
+      ${approved ? "承認済み（確定・編集不可）" : "ドラフト（編集できます）"}</strong> / 第${rec.version}版
+      ${rec.approved_by ? ` / 承認者: ${rec.approved_by}（${rec.approved_at}）` : ""}</p>
+
+    ${approved
+      ? '<div class="banner ok">この報告書は承認され確定しました。内容は変更できません。修正が必要な場合は新しい版を作成してください。</div>'
+      : '<div class="banner info">AIが作ったたたき台です。左側で自由に書き換えられます。内容を確認して問題なければ「承認して確定する」を押してください。<strong>確定は必ず人が行います。</strong></div>'}
+    ${isQa(u) ? '<div class="banner deny">品質管理部の権限は閲覧のみです。編集・承認はできません。</div>' : ""}
+
+    <div class="editor">
+      <div>
+        <label>本文（左を編集すると右のプレビューに反映されます）</label>
+        <textarea id="body" ${approved || isQa(u) ? "disabled" : ""}>${rec.body}</textarea>
+      </div>
+      <div>
+        <label>プレビュー（オーナー様に届く見た目）</label>
+        <div class="preview" id="preview"></div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:14px">
+      ${!approved && canApprove ? `
+        <button class="secondary" onclick="doSave()">下書きを保存</button>
+        <button class="approve" onclick="doApprove()">承認して確定する</button>` : ""}
+      <button onclick="doPdf()">PDFをダウンロード</button>
+      <span class="muted" id="saveMsg"></span>
+    </div>
+  `;
+
+  const ta = document.getElementById("body");
+  if (ta) {
+    const paint = () => document.getElementById("preview").innerHTML = mdToHtml(ta.value);
+    ta.addEventListener("input", paint);
+    paint();
+  }
+}
+
+function doSave() {
+  rec.body = document.getElementById("body").value;
+  saveState(State);
+  document.getElementById("saveMsg").textContent = "下書きを保存しました。";
+}
+
+function doApprove() {
+  if (!confirm("承認するとオーナー様向けに確定し、以降は編集できなくなります。よろしいですか？")) return;
+  rec.body = document.getElementById("body").value;
+  rec.status = "approved";
+  rec.approved_by = u.email;
+  rec.approved_at = new Date().toLocaleString("ja-JP");
+  saveState(State);
+  logAudit("月次報告書の承認", `${propertyName(rec.property_id)} ${rec.month}`, `第${rec.version}版を確定`);
+  render();
+}
+
+function doPdf() {
+  alert("本番ではここでPDFがダウンロードされます。\n\nファイル名: monthly-"
+    + rec.property_id + "-" + rec.month.replace("-", "") + "-v" + rec.version + ".pdf"
+    + "\n\n（モックのため実ファイルは出力されません）");
+}
+
+render();
+</script>
+</body>
+</html>

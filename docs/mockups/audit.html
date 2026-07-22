@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>監査ログ — モック</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<script src="mock-data.js"></script>
+
+<h1>監査ログ <span class="mockflag">MOCK</span></h1>
+<p class="sub">
+  「誰がいつ何を変えたか」の記録です。受入条件で <strong>分類の上書き</strong> と
+  <strong>月次報告書の承認</strong> は記録が残ることが求められています。
+</p>
+
+<div id="log"></div>
+
+<script>
+renderTopbar("audit");
+
+document.getElementById("log").innerHTML = State.audit.length === 0
+  ? '<p class="empty">まだ記録がありません。報告書の分類を直すか、月次報告書を承認すると、ここに残ります。</p>'
+  : `<table>
+      <thead><tr><th>日時</th><th>操作した人</th><th>操作</th><th>対象</th><th>内容</th></tr></thead>
+      <tbody>${State.audit.map(a => `
+        <tr>
+          <td>${a.at}</td><td>${a.actor}</td><td>${a.action}</td>
+          <td>${a.target}</td><td>${a.detail}</td>
+        </tr>`).join("")}</tbody>
+    </table>`;
+</script>
+</body>
+</html>

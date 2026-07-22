@@ -1,0 +1,18 @@
+{
+  "name": "同じ報告が二重に届いても二重登録・二重通知しない",
+  "requirements": ["F-1-1"],
+  "description": "既存の報告システムからの再送やリトライで同一 source_key が二度届いても、2件目はスキップされ通知も飛ばないことを確認する（冪等性）。",
+  "inputs": [
+    {
+      "source_key": "reports/dup/same-001.json",
+      "text": "エレベーターが停止し、閉じ込めが発生しました。至急対応中です。",
+      "expect": { "urgency": "high", "notified": true, "duplicate": false, "queued": false }
+    },
+    {
+      "source_key": "reports/dup/same-001.json",
+      "text": "エレベーターが停止し、閉じ込めが発生しました。至急対応中です。",
+      "expect": { "duplicate": true, "notified": false }
+    }
+  ],
+  "expect_overall": { "lost": 0, "notified": 1, "duplicates": 1 }
+}

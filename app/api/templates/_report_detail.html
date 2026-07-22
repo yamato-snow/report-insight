@@ -1,0 +1,70 @@
+{# HTMX 部分テンプレート: 報告書1件の詳細と分類の上書き（F-4-4）。
+   raw_text は現場スタッフの自由記述、normalized_summary は LLM 出力。いずれも自動エスケープされる。 #}
+{% set a = report.analysis %}
+<div class="detail">
+  <div class="detail-head">
+    <h2>報告書 #{{ report.id }}</h2>
+    <button class="secondary" onclick="document.getElementById('detail').innerHTML=''">閉じる</button>
+  </div>
+
+  {% if saved %}
+  <p class="ok">分類を確定しました。この報告書は「人間確認済」になり、未分類キューから外れます。</p>
+  {% endif %}
+
+  <table>
+    <tr><th>物件</th><td>{{ property_names.get(report.property_id, report.property_id) }}</td></tr>
+    <tr><th>報告日時</th><td>{{ report.reported_at.strftime("%Y-%m-%d %H:%M") }}</td></tr>
+    <tr><th>報告者</th><td>{{ report.reporter_role }}</td></tr>
+    {% if a %}
+    <tr><th>AIの分類</th><td>{{ category_labels[a.category] }}</td></tr>
+    <tr><th>AIの緊急度</th><td><span class="badge u-{{ a.urgency.value }}">{{ urgency_labels[a.urgency] }}</span></td></tr>
+    <tr><th>状態</th><td class="s-{{ a.status.value }}">{{ status_labels[a.status] }}</td></tr>
+    <tr><th>AIの確信度</th><td>{{ "%.2f"|format(a.confidence) }}{% if a.status.value == "needs_review" %}（低いため人の確認が必要です）{% endif %}</td></tr>
+    <tr><th>対応要否</th><td>{{ "要対応" if a.action_required else "対応不要" }}</td></tr>
+    {% endif %}
+  </table>
+
+  {% if a %}
+  <h3>AIの要約</h3>
+  <p>{{ a.normalized_summary }}</p>
+  {% endif %}
+
+  <h3>現場スタッフの原文</h3>
+  <div class="rawtext">{{ report.raw_text }}</div>
+
+  {% if a and a.status.value == "needs_review" %}
+  <h3>分類を直す</h3>
+  <p class="muted">正しい内容に直して確定すると「人間確認済」になり、未分類キューから外れます。この操作は監査ログに残ります。</p>
+  <form class="row"
+        hx-post="/admin/reports/{{ report.id }}/analysis?uid={{ uid }}"
+        hx-target="#detail"
+        hx-swap="innerHTML">
+    <div>
+      <label>分類</label>
+      <select name="category">
+        {% for c in categories %}
+        <option value="{{ c.value }}" {% if c == a.category %}selected{% endif %}>{{ category_labels[c] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>緊急度</label>
+      <select name="urgency">
+        {% for u in urgencies %}
+        <option value="{{ u.value }}" {% if u == a.urgency %}selected{% endif %}>{{ urgency_labels[u] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>対応要否</label>
+      <select name="action_required">
+        <option value="true" {% if a.action_required %}selected{% endif %}>要対応</option>
+        <option value="false" {% if not a.action_required %}selected{% endif %}>対応不要</option>
+      </select>
+    </div>
+    <button type="submit">この内容で確定する</button>
+  </form>
+  {% elif a %}
+  <p class="muted">この報告書は確認済みのため、修正待ちの状態ではありません。</p>
+  {% endif %}
+</div>

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report Insight — 月次報告書の編集</title>
+<link rel="stylesheet" href="/static/app.css">
+{% if report.status.value == "generating" %}
+{# 生成はバックグラウンドのため、完成するまで自動で見に行く（API の 202→ポーリングと同じ考え方） #}
+<meta http-equiv="refresh" content="3">
+{% endif %}
+</head>
+<body>
+  {% include "_topbar.html" %}
+
+  <h1>{{ property_names.get(report.property_id, report.property_id) }}（{{ report.month.strftime("%Y-%m") }}）</h1>
+  <p class="sub">
+    状態: <strong class="{% if report.status.value == 'approved' %}s-human_verified{% endif %}">{{ monthly_status_labels[report.status] }}</strong>
+    / 第{{ report.version }}版
+    {% if report.approved_at %} / 承認日時: {{ report.approved_at.strftime("%Y-%m-%d %H:%M") }}{% endif %}
+    ／ <a href="/monthly?uid={{ uid }}">一覧へ戻る</a>
+  </p>
+
+  {% if saved %}
+  <div class="banner ok">下書きを保存しました。</div>
+  {% endif %}
+
+  {% if report.status.value == "generating" %}
+  <div class="banner info">作成中です… 当月の報告書を集計して所見を書いています。数秒ごとに自動で確認します。</div>
+
+  {% elif report.status.value == "failed" %}
+  <div class="banner deny">作成に失敗しました。一覧に戻ってもう一度作成してください。</div>
+
+  {% else %}
+    {% if report.status.value == "approved" %}
+    <div class="banner ok">
+      この報告書は承認され確定しました。内容は変更できません。修正が必要な場合は新しい版を作成してください。
+    </div>
+    {% elif user.is_qa %}
+    <div class="banner deny">品質管理部の権限は閲覧のみです。編集・承認はできません。</div>
+    {% else %}
+    <div class="banner info">
+      たたき台です。左側で自由に書き換えられます。内容を確認して問題なければ「承認して確定する」を押してください。
+      <strong>確定は必ず人が行います。</strong>
+    </div>
+    {% endif %}
+
+    <form method="post" action="/monthly/{{ report.id }}/save?uid={{ uid }}" id="editForm">
+      <div class="editor">
+        <div>
+          <label>本文（Markdown）</label>
+          <textarea name="body_markdown" id="body" {% if not editable %}readonly{% endif %}>{{ report.body_markdown }}</textarea>
+        </div>
+        <div>
+          <label>プレビュー（オーナー様に届く見た目）</label>
+          <div class="preview" id="preview"></div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:14px">
+        {% if editable %}
+        <button type="submit">下書きを保存</button>
+        <button type="submit" class="approve"
+                formaction="/monthly/{{ report.id }}/approve?uid={{ uid }}"
+                onclick="return confirm('承認するとオーナー様向けに確定し、以降は編集できなくなります。よろしいですか？')">
+          承認して確定する
+        </button>
+        {% endif %}
+        <a href="/monthly/{{ report.id }}/pdf?uid={{ uid }}"><button type="button">PDFをダウンロード</button></a>
+      </div>
+    </form>
+
+    <script>
+      // プレビューは表示補助のみ。確定される内容は常に textarea の中身（サーバ側で保存）。
+      const body = document.getElementById("body");
+      const preview = document.getElementById("preview");
+      function esc(s) {
+        return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
+      function renderPreview() {
+        const lines = esc(body.value).split("\n");
+        let html = "", inTable = false;
+        for (const line of lines) {
+          if (/^\|/.test(line)) {
+            if (/^\|[\s:|-]+\|$/.test(line)) continue;
+            const cells = line.split("|").slice(1, -1).map(c => c.trim());
+            if (!inTable) { html += "<table>"; inTable = true; }
+            html += "<tr>" + cells.map(c => `<td>${c}</td>`).join("") + "</tr>";
+            continue;
+          }
+          if (inTable) { html += "</table>"; inTable = false; }
+          if (/^# /.test(line)) html += `<h2>${line.slice(2)}</h2>`;
+          else if (/^## /.test(line)) html += `<h3>${line.slice(3)}</h3>`;
+          else if (line.trim() !== "") html += `<p>${line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")}</p>`;
+        }
+        if (inTable) html += "</table>";
+        preview.innerHTML = html;
+      }
+      body.addEventListener("input", renderPreview);
+      renderPreview();
+    </script>
+  {% endif %}
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report Insight — モック（受入テスト用）</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<script src="mock-data.js"></script>
+
+<h1>Report Insight — 画面モック <span class="mockflag">MOCK</span></h1>
+<p class="sub">
+  これは<strong>見た目と操作の確認用</strong>のモックです。本物のデータベースやAIは動いておらず、
+  ブラウザの中のダミーデータだけで動いています。承認をいただいた後に本体へ組み込みます。
+</p>
+
+<div class="banner info">
+  <strong>使い方：</strong>右上の「利用者」を切り替えると、立場ごとに見える範囲が変わります。
+  何をしても壊れません。元に戻したいときは右上の「リセット」を押してください。
+</div>
+
+<h2>まずはここから</h2>
+
+<div class="card">
+  <strong><a href="checklist.html">受入テスト チェックリスト</a></strong>
+  <p class="muted" style="margin:4px 0 0">
+    全29ケースを立場ごとに1件ずつ確認する表です。<strong>OK / NG をその場で記録</strong>でき、
+    途中でやめて再開もできます。終わったら結果をテキストで書き出せます。
+    まずこれを開いて、上から順に進めるのが早いです。
+  </p>
+</div>
+
+<h2>受入テスト用の治具</h2>
+
+<div class="card">
+  <strong><a href="pipeline.html">データの流れを検証する</a> <span class="mockflag">検査用</span></strong>
+  <p class="muted" style="margin:4px 0 0">
+    報告書が<strong>どこを通って画面に出てくるか</strong>を可視化した画面です。
+    日次バッチを流すと、S3到着 → SQS → ワーカー処理 → DB保存 の各段の件数が進み、
+    <strong>緊急通知・未分類キューへの回送・処理失敗（DLQ）</strong>の内訳が出ます。
+    わざと異常を混ぜて、<strong>取りこぼしが起きないか・監視のしきい値に触れるか</strong>を確認できます。
+  </p>
+</div>
+
+<div class="card">
+  <strong><a href="submit.html">報告を投入する</a> <span class="mockflag">検査用</span></strong>
+  <p class="muted" style="margin:4px 0 0">
+    現場スタッフになったつもりで報告を書き、<strong>AIがどう仕分けるか</strong>をその場で見る画面です。
+    要件上、現場スタッフ向けの報告画面は<strong>スコープ外</strong>（既存システムを使い続ける）なので、
+    これは製品の機能ではなく<strong>テストのための入口</strong>です。
+    ここから投入すると下の「報告書」一覧に現れ、一連の流れを通しで確認できます。
+  </p>
+</div>
+
+<h2>今回追加する画面</h2>
+
+<div class="card">
+  <div class="spread">
+    <div>
+      <strong><a href="admin.html">報告書の一覧・確認</a></strong>
+      <p class="muted" style="margin:4px 0 0">
+        課題①「1日400件の確認負荷」に対応。一覧の絞り込みに加え、<strong>行をクリックして中身を読み</strong>、
+        AIが迷った報告書の<strong>分類を人が直せる</strong>ようになりました。物件名の表示とページ送りも追加しています。
+      </p>
+    </div>
+  </div>
+  <p class="muted" style="margin:8px 0 0">追加分：B（分類の直し）・C（詳細）・E（物件名）・F（ページ送り）</p>
+</div>
+
+<div class="card">
+  <div class="spread">
+    <div>
+      <strong><a href="monthly-list.html">月次報告書</a></strong>
+      <p class="muted" style="margin:4px 0 0">
+        課題③「月次報告書に1物件2時間」に対応。物件と月を選ぶと<strong>ドラフトが自動生成</strong>され、
+        <strong>編集 → 承認 → PDF出力</strong>まで画面だけで完結します。承認後は編集できなくなります。
+      </p>
+    </div>
+  </div>
+  <p class="muted" style="margin:8px 0 0">追加分：A（月次報告書一式）</p>
+</div>
+
+<div class="card">
+  <div class="spread">
+    <div>
+      <strong><a href="audit.html">監査ログ</a></strong>
+      <p class="muted" style="margin:4px 0 0">
+        「誰がいつ分類を直したか」「誰が月次報告書を承認したか」の記録。
+        受入条件で「監査ログに残ること」が求められているため、確認できる場所を用意しました。
+      </p>
+    </div>
+  </div>
+</div>
+
+<h2>すでにある画面（今回は変更なし）</h2>
+<div class="card">
+  <strong>検索画面</strong>
+  <p class="muted" style="margin:4px 0 0">
+    課題②「過去事例が探せない」に対応済み。本体を起動すると <code>http://localhost:8000/</code> で触れます。
+    モックには含めていません（すでに動くものがあるため）。
+  </p>
+</div>
+
+<h2>右上の利用者について</h2>
+<table>
+  <thead><tr><th>利用者</th><th>立場</th><th>見える範囲</th><th>月次の承認</th></tr></thead>
+  <tbody>
+    <tr><td>東京支店マネージャ</td><td>支店管理者</td><td>東京支店の物件のみ</td><td>できる</td></tr>
+    <tr><td>大阪支店マネージャ</td><td>支店管理者</td><td>大阪支店の物件のみ</td><td>できる</td></tr>
+    <tr><td>本社品質管理部</td><td>QA</td><td>全支店を横断</td><td><strong>できない（閲覧のみ）</strong></td></tr>
+  </tbody>
+</table>
+
+<script>renderTopbar("home");</script>
+</body>
+</html>

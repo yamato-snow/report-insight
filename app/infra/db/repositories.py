@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.domain.entities import (
+    AuditEntry,
     MonthlyReport,
     MonthlyStats,
     Property,
@@ -22,7 +23,7 @@ from app.domain.entities import (
     User,
 )
 from app.domain.errors import NotFoundError, PermissionDeniedError
-from app.domain.values import AnalysisStatus, Category, MonthlyStatus, Urgency
+from app.domain.values import AnalysisStatus, AuditAction, Category, MonthlyStatus, Urgency
 from app.infra.db import models
 from app.infra.db.mappers import (
     analysis_to_domain,
@@ -46,6 +47,15 @@ class SqlUserRepository:
         if row is None:
             raise NotFoundError(f"user_id={user_id} は存在しません")
         return user_to_domain(row)
+
+    async def list_all(self) -> list[User]:
+        """利用者一覧。管理画面の利用者切替セレクタ（SSO 抽象点）にのみ使う。"""
+        rows = (
+            (await self._session.execute(select(models.User).order_by(models.User.id)))
+            .scalars()
+            .all()
+        )
+        return [user_to_domain(r) for r in rows]
 
     async def list_properties(self, user: User) -> list[Property]:
         stmt = select(models.Property)
@@ -419,6 +429,26 @@ class SqlMonthlyReportRepository:
             raise NotFoundError(f"monthly_id={monthly_id} は存在しません")
         return monthly_to_domain(row)
 
+    async def list_reports(
+        self, permitted_property_ids: Sequence[int], limit: int
+    ) -> list[MonthlyReport]:
+        """権限内の月次報告書を新しい順に返す（画面の一覧用）。"""
+        if not permitted_property_ids:
+            return []
+        rows = (
+            (
+                await self._session.execute(
+                    select(models.MonthlyReport)
+                    .where(models.MonthlyReport.property_id.in_(list(permitted_property_ids)))
+                    .order_by(models.MonthlyReport.id.desc())
+                    .limit(limit)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [monthly_to_domain(r) for r in rows]
+
     async def set_body(
         self, monthly_id: int, body_markdown: str, status: MonthlyStatus
     ) -> MonthlyReport:
@@ -461,3 +491,28 @@ class SqlAuditRepository:
         await self._session.execute(
             insert(models.AuditLog).values(user_id=user_id, action=action, payload=payload)
         )
+
+    async def list_recent(self, limit: int) -> list[AuditEntry]:
+        """新しい順の監査ログ（画面確認用の参照系）。
+
+        追記専用ログなので更新系は持たない。受入条件（F-4-3 / F-4-4 の「監査ログに残る」）を
+        画面で確認できるようにするための読み取り口。
+        """
+        rows = (
+            await self._session.execute(
+                select(models.AuditLog, models.User.email)
+                .join(models.User, models.User.id == models.AuditLog.user_id)
+                .order_by(models.AuditLog.id.desc())
+                .limit(limit)
+            )
+        ).all()
+        return [
+            AuditEntry(
+                id=log.id,
+                actor_email=email,
+                action=AuditAction(log.action),
+                payload=log.payload,
+                created_at=log.created_at,
+            )
+            for log, email in rows
+        ]

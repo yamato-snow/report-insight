@@ -4,11 +4,23 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
+from fastapi.staticfiles import StaticFiles
 
 from app.api.error_handlers import register_error_handlers
-from app.api.routers import admin_ui, health, monthly, reports, search, ui
+from app.api.routers import (
+    admin_ui,
+    audit_ui,
+    health,
+    monthly,
+    monthly_ui,
+    reports,
+    scenario_ui,
+    search,
+    ui,
+)
 from app.core.config import get_settings
 from app.core.di import build_container
 from app.core.logging import configure_logging
@@ -45,9 +57,19 @@ def create_app() -> FastAPI:
         return response
 
     register_error_handlers(app)
+    app.mount(
+        "/static",
+        StaticFiles(directory=str(Path(__file__).resolve().parent / "static")),
+        name="static",
+    )
     app.include_router(health.router)
     app.include_router(ui.router)
     app.include_router(admin_ui.router)
+    app.include_router(monthly_ui.router)
+    app.include_router(audit_ui.router)
+    # 受入シナリオ実行UIは検査用の治具。本番ではマウントしない（tests 依存を持ち込まない）
+    if get_settings().env != "prod":
+        app.include_router(scenario_ui.router)
     app.include_router(search.router, prefix=API_PREFIX)
     app.include_router(monthly.router, prefix=API_PREFIX)
     app.include_router(reports.router, prefix=API_PREFIX)

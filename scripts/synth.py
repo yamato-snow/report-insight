@@ -65,6 +65,34 @@ _TEMPLATES: list[Sample] = [
         SampleLabel(Category.EQUIPMENT_FAILURE, Urgency.HIGH, True),
         tags=["urgent"],
     ),
+    # エレベーターは建物管理で最も代表的な事象。検索デモの主要クエリでもあるため、
+    # 対応済み・閉じ込め・表記ゆれ・点検の4パターンを揃える（受入テスト T-26 の空振り対策）。
+    Sample(
+        "3号機エレベーターが5階で停止。閉じ込めはなし。保守会社へ連絡し、"
+        "技術者が到着後に制御盤のリレー交換を実施して復旧しました。",
+        "管理員",
+        SampleLabel(Category.EQUIPMENT_FAILURE, Urgency.HIGH, True),
+        tags=["urgent"],
+    ),
+    Sample(
+        "エレベーター内に入居者が閉じ込められました。インターホンで応答を確認し、"
+        "保守会社の到着まで声かけを継続。約20分で救出、けがはありません。",
+        "管理員",
+        SampleLabel(Category.EQUIPMENT_FAILURE, Urgency.HIGH, True),
+        tags=["urgent"],
+    ),
+    Sample(
+        # 表記ゆれ（昇降機 vs エレベーター）
+        "昇降機の扉が閉まりにくいとの申告。戸開閉装置の調整で対応済み。",
+        "点検員",
+        SampleLabel(Category.EQUIPMENT_FAILURE, Urgency.MEDIUM, True),
+        tags=["notation"],
+    ),
+    Sample(
+        "エレベーターの法定点検を実施。異常なし。次回は3か月後の予定です。",
+        "点検員",
+        SampleLabel(Category.OTHER, Urgency.LOW, False),
+    ),
     Sample(
         "清掃中にトイレの給水管の破損を発見しました。水が少し漏れています。",  # 境界例→equipment
         "清掃員",
