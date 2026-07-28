@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Report Insight — 管理画面</title>
-<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<script src="/static/htmx.min.js"></script>
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
@@ -56,6 +56,7 @@
       </select>
     </div>
     <button type="submit">絞り込み</button>
+    <span class="htmx-indicator">更新中…</span>
   </form>
 
   <div class="tabs">
@@ -64,7 +65,7 @@
   </div>
 
   {# 分類を確定すると HX-Trigger: reportsChanged が返り、上のフォームが再送される #}
-  <div id="reports">読み込み中…</div>
+  <div id="reports"><div class="empty-state">読み込み中…</div></div>
 
   <script>
     // タブは「フォームの hidden 値を切り替えて送り直す」だけ。表示中の条件を1か所に集約する。

@@ -8,19 +8,17 @@ SSO は抽象化済みのため、dev では利用者を uid クエリで指定�
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Form, HTTPException, Query, Request
+from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from pydantic import BeforeValidator
 
 from app.api.deps import ContainerDep
 from app.api.labels import template_context
+from app.api.routers._ui_shared import TEMPLATES, all_users, resolve_user
 from app.core.db import unit_of_work
 from app.domain.entities import Property, Report, ReportListFilters, User
-from app.domain.errors import NotFoundError
 from app.domain.values import AnalysisStatus, Category, Urgency
 
 router = APIRouter(tags=["admin-ui"])
@@ -41,24 +39,8 @@ CategoryFilter = Annotated[Category | None, _Blankable, Query()]
 UrgencyFilter = Annotated[Urgency | None, _Blankable, Query()]
 StatusFilter = Annotated[AnalysisStatus | None, _Blankable, Query()]
 
-_TEMPLATES = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
-
 # 1ページの表示件数。keyset ページングのため「次へ」の有無判定に +1 件を余分に取る。
 PAGE_SIZE = 20
-
-
-async def _resolve_user(container: ContainerDep, uid: int) -> User:
-    async with container.session_factory() as session:
-        try:
-            return await container.user_repository(session).get(uid)
-        except NotFoundError as exc:
-            raise HTTPException(status_code=401, detail="不明な利用者です") from exc
-
-
-async def _all_users(container: ContainerDep) -> list[User]:
-    """利用者切替セレクタ用の一覧（dev 限定。本番は SSO のセッションに置換）。"""
-    async with container.session_factory() as session:
-        return await container.user_repository(session).list_all()
 
 
 def _property_names(properties: list[Property]) -> dict[int, str]:
@@ -77,15 +59,15 @@ async def admin_home(
     uid: int = Query(..., description="dev用の利用者ID（SSO抽象点）"),
 ) -> HTMLResponse:
     """管理画面トップ（フィルタ + 一覧 + 未分類キュータブ）。"""
-    user = await _resolve_user(container, uid)
+    user = await resolve_user(container, uid)
     props = await _permitted_properties(container, user)
-    return _TEMPLATES.TemplateResponse(
+    return TEMPLATES.TemplateResponse(
         request,
         "admin.html",
         {
             "user": user,
             "uid": uid,
-            "users": await _all_users(container),
+            "users": await all_users(container),
             "properties": props,
             "categories": list(Category),
             "urgencies": list(Urgency),
@@ -109,7 +91,7 @@ async def admin_reports_partial(
     cursor: int | None = None,
 ) -> HTMLResponse:
     """一覧/未分類キューの HTMX 部分テンプレート（テーブル行 + ページ送り）。"""
-    user = await _resolve_user(container, uid)
+    user = await resolve_user(container, uid)
     props = await _permitted_properties(container, user)
 
     async with container.session_factory() as session:
@@ -126,7 +108,7 @@ async def admin_reports_partial(
     reports: list[Report] = rows[:PAGE_SIZE]
     next_cursor = reports[-1].id if has_next and reports else None
 
-    return _TEMPLATES.TemplateResponse(
+    return TEMPLATES.TemplateResponse(
         request,
         "_reports_table.html",
         {
@@ -155,11 +137,11 @@ async def admin_report_detail(
     uid: int = Query(...),
 ) -> HTMLResponse:
     """報告書1件の詳細（原文 + 分類の上書きフォーム）。権限外は AdminService が 403 を投げる。"""
-    user = await _resolve_user(container, uid)
+    user = await resolve_user(container, uid)
     props = await _permitted_properties(container, user)
     async with container.session_factory() as session:
         report = await container.admin_service(session).get_report(user, report_id)
-    return _TEMPLATES.TemplateResponse(
+    return TEMPLATES.TemplateResponse(
         request,
         "_report_detail.html",
         {
@@ -188,14 +170,14 @@ async def admin_override_analysis(
 
     レスポンスヘッダ HX-Trigger で一覧側に再読み込みを促し、キューから消えることを画面に反映する。
     """
-    user = await _resolve_user(container, uid)
+    user = await resolve_user(container, uid)
     props = await _permitted_properties(container, user)
     async with unit_of_work(container.session_factory) as session:
         service = container.admin_service(session)
         await service.override_analysis(user, report_id, category, urgency, action_required)
         report = await service.get_report(user, report_id)
 
-    response = _TEMPLATES.TemplateResponse(
+    response = TEMPLATES.TemplateResponse(
         request,
         "_report_detail.html",
         {

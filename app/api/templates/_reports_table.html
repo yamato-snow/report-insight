@@ -1,6 +1,12 @@
 {# HTMX 部分テンプレート: 報告書テーブル。全テキストは自動エスケープ（XSS対策）。 #}
 {% if not reports %}
-<p style="color:#888">該当する報告書はありません。</p>
+<div class="empty-state">
+  {% if queue %}
+  未分類の報告書はありません。AIの確信度が低い報告書が届くと、ここに並びます。
+  {% else %}
+  該当する報告書はありません。絞り込み条件を変えるか、「すべて」に戻してお試しください。
+  {% endif %}
+</div>
 {% else %}
 <table>
   <thead>
@@ -22,7 +28,7 @@
       <td>{{ category_labels[r.analysis.category] }}</td>
       <td><span class="badge u-{{ r.analysis.urgency.value }}">{{ urgency_labels[r.analysis.urgency] }}</span></td>
       <td class="s-{{ r.analysis.status.value }}">{{ status_labels[r.analysis.status] }}</td>
-      <td>{{ r.analysis.normalized_summary }}</td>
+      <td><div class="truncate-2" title="{{ r.analysis.normalized_summary }}">{{ r.analysis.normalized_summary }}</div></td>
       {% else %}
       <td>-</td><td>-</td><td>-</td><td>-</td>
       {% endif %}

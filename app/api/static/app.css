@@ -34,8 +34,12 @@ a { color: #2563eb; }
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
   flex-wrap: wrap; border-bottom: 1px solid #8883; padding-bottom: 10px; margin-bottom: 18px;
 }
-.nav { display: flex; gap: 14px; font-size: .9rem; }
+.nav { display: flex; gap: 14px; font-size: .9rem; align-items: baseline; }
 .nav a.active { font-weight: 700; text-decoration: none; }
+.nav a.brand {
+  font-weight: 700; font-size: 1rem; letter-spacing: .01em;
+  color: inherit; text-decoration: none; margin-right: 6px;
+}
 .whoami { font-size: .8rem; color: #888; display: flex; align-items: center; gap: 8px; }
 
 .tabs { margin: 18px 0 10px; display: flex; gap: 8px; }
@@ -74,3 +78,59 @@ tbody tr.clickable:hover { background: #2563eb18; cursor: pointer; }
 .banner.ok { background: #05966922; }
 .banner.warn { background: #d9770622; }
 .banner.deny { background: #dc262622; }
+
+/* 空状態・読み込み中（一覧・監査ログ共通） */
+.empty-state {
+  border: 1px dashed #8885; border-radius: 8px; padding: 20px 16px;
+  color: #888; font-size: .88rem; text-align: center; margin-top: 12px;
+}
+.htmx-indicator { display: none; color: #888; font-size: .82rem; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: inline; }
+
+/* 一覧の要約セル（全文は行クリックの詳細ペインで読む） */
+.truncate-2 {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; max-width: 32em;
+}
+
+/* トップページ（3課題 → 各画面への導線） */
+.hero { margin: 28px 0 24px; }
+.hero h1 { font-size: 1.6rem; margin-bottom: 8px; }
+.hero p { color: #666; margin: 0; }
+@media (prefers-color-scheme: dark) { .hero p { color: #aaa; } }
+.problem-cards {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px;
+}
+@media (max-width: 860px) { .problem-cards { grid-template-columns: 1fr; } }
+.pcard {
+  display: block; border: 1px solid #8884; border-radius: 10px; padding: 16px 18px;
+  color: inherit; text-decoration: none; line-height: 1.55;
+}
+.pcard:hover { border-color: #2563eb; background: #2563eb0d; }
+.pcard-problem { font-size: .78rem; color: #b45309; margin-bottom: 8px; }
+.pcard h2 { margin: 0 0 6px; font-size: 1.02rem; color: #2563eb; }
+.pcard p { margin: 0 0 6px; font-size: .85rem; }
+.pcard-role { color: #888; font-size: .78rem; }
+
+/* 過去事例検索 */
+.field { flex: 1; min-width: 240px; }
+.field input[type=text] { width: 100%; padding: 8px 10px; font-size: .95rem; }
+.examples { margin-top: 8px; font-size: .82rem; color: #888; }
+.examples a { color: #2563eb; cursor: pointer; text-decoration: none; margin-right: 12px; }
+.card { border: 1px solid #8883; border-radius: 12px; padding: 16px; margin-top: 20px; }
+.card h2 {
+  font-size: .8rem; text-transform: uppercase; letter-spacing: .05em;
+  color: #888; margin: 0 0 10px;
+}
+.src { border-left: 3px solid #2563eb55; padding: 4px 0 4px 12px; margin: 8px 0; font-size: .9rem; }
+.src .id { font-family: ui-monospace, monospace; color: #2563eb; font-weight: 600; }
+.src .date { color: #888; font-size: .8rem; margin-left: 6px; }
+#answer { white-space: pre-wrap; min-height: 1.6em; }
+.cite {
+  display: inline-block; background: #2563eb22; color: #2563eb; border-radius: 6px;
+  padding: 0 6px; font-family: ui-monospace, monospace; font-size: .82rem;
+}
+.meta { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: .82rem; color: #888; }
+.meta b { color: inherit; font-weight: 600; }
+.empty { color: #d97706; font-weight: 600; }
+.err { color: #dc2626; }

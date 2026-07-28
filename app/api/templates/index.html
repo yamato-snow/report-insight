@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report Insight</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  {% include "_topbar.html" %}
+
+  <div class="hero">
+    <h1>Report Insight</h1>
+    <p>現場の点検・清掃報告書をAIが仕分け・検索できるようにし、月次報告書の下書きまで作るシステムです。<br>
+    AIは提案とたたき台を担当し、<strong>確定の判断は必ず人が行います</strong>。</p>
+  </div>
+
+  <div class="problem-cards">
+    <a class="pcard" href="/admin?uid={{ uid }}">
+      <div class="pcard-problem">1日約400件の報告書を目視確認。異常の見落としが怖い</div>
+      <h2>報告書の一覧・確認</h2>
+      <p>AIが分類・緊急度・要約を付け、緊急案件は即時に通知します。</p>
+      <p class="pcard-role"><b>AI:</b> 分類の提案と要約　<b>人:</b> 自信のない分類だけキューで確認・確定</p>
+    </a>
+    <a class="pcard" href="/search?uid={{ uid }}">
+      <div class="pcard-problem">「前どう対応したっけ」がベテランの記憶頼み</div>
+      <h2>過去事例検索</h2>
+      <p>自然な言葉で聞くと、根拠の報告書を示しながら回答します。</p>
+      <p class="pcard-role"><b>AI:</b> 検索と回答の下書き　<b>人:</b> 根拠の報告書で裏取り</p>
+    </a>
+    <a class="pcard" href="/monthly?uid={{ uid }}">
+      <div class="pcard-problem">オーナー向け月次報告書の作成に1物件2時間</div>
+      <h2>月次報告書</h2>
+      <p>件数はデータベースの集計値、AIが書くのは所見の文章だけです。</p>
+      <p class="pcard-role"><b>AI:</b> 所見のたたき台　<b>人:</b> 編集して承認（承認後は変更不可）</p>
+    </a>
+  </div>
+
+  <p class="muted" style="margin-top:24px">
+    分類の上書き・月次の承認・検索は、すべて<a href="/audit?uid={{ uid }}">監査ログ</a>に追記のみで記録されます。
+  </p>
+</body>
+</html>
