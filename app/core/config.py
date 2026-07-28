@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     model_classify: str = "claude-haiku-4-5-20251001"
     model_generate: str = "claude-sonnet-5"
+    # LLM-as-judge は生成モデルと別モデルにする（自己採点バイアスの回避。LLM設計書 §4）。
+    model_judge: str = "claude-opus-5"
     llm_max_concurrency: int = 4
     confidence_threshold: float = 0.85
 

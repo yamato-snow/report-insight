@@ -17,6 +17,7 @@ from app.domain.entities import (
 )
 from app.domain.labels import CATEGORY_JP
 from app.domain.values import Category, Urgency
+from app.infra.llm import summaries
 from app.infra.llm.prompts import load_prompt
 
 _HIGH_URGENCY_KEYWORDS = (
@@ -32,7 +33,38 @@ _HIGH_URGENCY_KEYWORDS = (
     "侵入",
     "ガス",
 )
-_EQUIPMENT_KEYWORDS = ("故障", "破損", "漏水", "水漏れ", "異音", "停止", "不具合", "設備")
+_EQUIPMENT_KEYWORDS = (
+    "故障",
+    "破損",
+    "漏水",
+    "水漏れ",
+    "異音",
+    "停止",
+    "不具合",
+    "設備",
+    # 現場報告で頻出する不具合の言い回し（キーワードそのものは含まれないが設備事象）。
+    "閉じ込め",
+    "発煙",
+    "焦げ臭",
+    "ぐらつき",
+    "緩み",
+    "劣化",
+    "ずれ",
+    "点滅",
+    "浮き",
+    "反応しない",
+    "動かない",
+    "開かない",
+    "閉まりきらない",
+    "閉まりにくい",
+    "上がらず",
+    "止まらない",
+    "起動しない",
+    "開きっぱなし",
+    "エラー",
+)
+# 「共用部・設備ともに異常なし」のような定型点検文で設備誤判定を避けるための打ち消し表現。
+_NO_ISSUE_MARKERS = ("異常はありません", "異常なし", "指摘事項なし")
 _CLEANING_KEYWORDS = ("清掃", "ゴミ", "汚れ", "美観", "落ち葉", "清掃中")
 _CLAIM_KEYWORDS = ("苦情", "クレーム", "要望", "騒音", "トラブル", "不満")
 _LOW_CONFIDENCE_MARKERS = ("曖昧", "不明", "判読不能", "？？")
@@ -56,9 +88,13 @@ class FakeLLMClient:
         confidence = self._confidence(masked_text)
         action_required = urgency is Urgency.HIGH or category is Category.EQUIPMENT_FAILURE
 
-        summary = masked_text.strip().replace("\n", " ")
-        if len(summary) > 80:
-            summary = summary[:78] + "…"
+        # 合成報告書には正解要約を持たせている（demo の見栄え。summaries 参照）。
+        # 一致しない入力（表記ゆれ・情報欠損・任意入力）は従来どおり切り詰めへ落ちる。
+        summary = summaries.lookup(masked_text)
+        if summary is None:
+            summary = masked_text.strip().replace("\n", " ")
+            if len(summary) > 80:
+                summary = summary[:78] + "…"
 
         result = ClassificationResult(
             category=category,
@@ -101,8 +137,12 @@ class FakeLLMClient:
 
     @staticmethod
     def _classify_category(text: str) -> Category:
+        # 「共用部・設備ともに異常なし」のような点検報告は不具合ではない。
+        # ただし打ち消すのは設備判定だけで、清掃・苦情の判定はそのまま活かす
+        # （例「清掃を実施。異常はありません」は cleaning のまま）。
+        no_issue = any(m in text for m in _NO_ISSUE_MARKERS)
         # 「清掃中に設備破損」は equipment_failure を優先（LLM設計書 §2 の境界例）
-        if any(k in text for k in _EQUIPMENT_KEYWORDS):
+        if not no_issue and any(k in text for k in _EQUIPMENT_KEYWORDS):
             return Category.EQUIPMENT_FAILURE
         if any(k in text for k in _CLAIM_KEYWORDS):
             return Category.CLAIM
@@ -114,6 +154,9 @@ class FakeLLMClient:
     def _classify_urgency(text: str) -> Urgency:
         if any(k in text for k in _HIGH_URGENCY_KEYWORDS):
             return Urgency.HIGH
+        # 「異常なし」の点検報告は設備語を含んでも緊急度を上げない（category 判定と同じ）。
+        if any(m in text for m in _NO_ISSUE_MARKERS):
+            return Urgency.LOW
         if any(k in text for k in _EQUIPMENT_KEYWORDS):
             return Urgency.MEDIUM
         return Urgency.LOW
