@@ -14,6 +14,24 @@
 
 Report Insight は報告書を LLM で自動仕分けし、緊急案件を即時通知、月次報告書をドラフト生成、過去事例を RAG で検索可能にする。
 
+## 画面
+
+**AIは提案とたたき台まで、確定の判断は必ず人が行う**——この原則を全画面で徹底している。
+
+RAG検索。回答はSSEでストリーミングされ、引用（report:番号）は実在検証済み。初回表示msを常時計測：
+
+![RAG検索のストリーミング](docs/images/search_stream.gif)
+
+| | |
+|---|---|
+| ![トップページ](docs/images/01_home.png) | ![未分類キューでの人間確認](docs/images/06_queue_detail.png) |
+| 3課題と画面の対応（トップ） | AIの確信度が低い報告書だけ人が確定 |
+| ![月次報告書エディタ](docs/images/09_monthly_editor.png) | ![監査ログ](docs/images/11_audit.png) |
+| 月次: 数字はSQL集計、AIは所見文のみ | 上書き・承認・検索は追記専用ログに記録 |
+
+操作フローの全体像と各画面の説明は [docs/demo/01_user_flow.md](docs/demo/01_user_flow.md)、
+デモの実施手順は [docs/demo/README.md](docs/demo/README.md) を参照。
+
 ## アーキテクチャ
 
 ```mermaid
@@ -56,14 +74,17 @@ graph LR
 | [CI/CD・DevSecOps設計](docs/09_cicd_devsecops.md) | セキュリティゲート（SAST/SCA/IaC/イメージスキャン）・OIDC・デプロイ/ロールバック戦略 |
 | [テスト計画書](docs/10_test_plan.md) | テストピラミッド・要件トレーサビリティ・非機能テスト・出口基準 |
 | [IaC戦略](docs/11_iac_strategy.md) | Terraform構成・ステート管理・plan差分レビュー運用・ドリフト検知 |
+| [受入テスト29ケース](docs/12_uat_cases.md) | 立場×画面×手順×期待結果（実施済み・機能不合格ゼロ） |
+| [運用Runbook](docs/runbook.md) | DLQ再処理・LLM縮退ラダー・コスト先行検知 |
 | [ADR](docs/adr/) | 技術選定の意思決定記録 |
+| [デモガイド](docs/demo/) | 操作フロー・AI/人間の役割分担・制約・設計判断の索引・動画台本 |
 
 ## このポートフォリオが証明すること
 
 | 実務要件 | 本プロジェクトでの証明ポイント |
 |---|---|
 | バックエンド開発 | FastAPI + 非同期パイプライン + DB設計 |
-| AWSインフラ構築・運用 | ECS / RDS / SQS / S3 を Terraform で構築、CloudWatch 監視 |
+| AWSインフラ設計 | ECS / RDS / SQS / S3 の Terraform 一式と CloudWatch 監視を設計・実装（**実環境へは未デプロイ**。順序判断で凍結中） |
 | 基本設計 | 要件定義書・基本設計書・ADR を docs/ として公開 |
 | クライアントワーク | スコープ管理・「AIは下書きまで、確定は人間」等の業務判断 |
 | LLM活用の難易度感 | ハルシネーション対策・評価データセット・コスト制御・モデル使い分け |
@@ -108,7 +129,9 @@ make lint              # ruff + mypy(strict) + import-linter（レイヤ依存�
 - [x] **P1: CI セキュリティゲート仕上げ**（gitleaks→bandit→pip-audit→integration→prompts変更時LLM回帰／
   terraform変更時 IaCスキャン→main で Docker build→Trivy(image)→SBOM。Alembic 可逆性検証込み）
 - [x] **P1: 運用 Runbook**（`docs/runbook.md`: DLQ再処理・LLM縮退ラダー・構造化失敗率対応 ほか）
-- [ ] P2: AWS dev への apply・OIDC デプロイジョブ・デモ動画
+- [x] **P2: 受入テスト**（29ケース実施・機能不合格ゼロ・`docs/12_uat_cases.md`。受入シナリオ自動判定 `make scenario` / `/scenarios`）
+- [x] **P2: 画面のクライアント向け仕上げ + デモ素材**（トップページ・全画面統一ビジュアル・スクショ/GIF・動画台本 `docs/demo/`）
+- [ ] P2: AWS dev への apply・OIDC デプロイジョブ（Terraform は実装済み・**apply は凍結中**。[制約一覧](docs/demo/03_constraints.md)）
 
 ### LLM評価（`make eval`）
 
@@ -127,7 +150,18 @@ make lint              # ruff + mypy(strict) + import-linter（レイヤ依存�
 - fake provider でのスモーク: ハーネスは端から端まで動作し injection 耐性チェックも機能
   （fake はキーワード分類のため精度閾値は満たさない＝閾値は実モデル向け）。
 
-### テスト状況（P1 時点）
+### テスト状況
 
-- unit 29件 / integration 21件 green（`make test` / `make test-integration`）
+- unit 48件 / integration 22件 / 受入シナリオ3件（自動判定・課金ゼロ）/ PDF日本語描画2件 すべて green
+  （`make test` / `make test-integration` / `make scenario` / `make test-pdf`）
+- 受入テスト 29ケース実施・機能面の不合格ゼロ（[docs/12_uat_cases.md](docs/12_uat_cases.md)）
 - `make lint`（ruff + mypy strict + import-linter 3契約）green
+
+## 制約（正直な開示）
+
+- **データはすべて架空**（合成報告書100件・シード固定で再現可能）
+- **AWS 未デプロイ**（Terraform は validate/fmt green・apply は順序判断で凍結中）
+- **SSO 未実装**（認可はサービス層で強制済み。認証は差し替え可能な抽象点として `?uid=` 切替）
+- 現場スタッフ向けの報告書投入画面は要件どおりスコープ外
+
+詳細と「面談での伝え方」は [docs/demo/03_constraints.md](docs/demo/03_constraints.md)。
