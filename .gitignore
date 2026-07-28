@@ -28,6 +28,7 @@ __pycache__/
 *.log
 tmp/
 tests/llm_eval/last_result.json
+tests/llm_eval/human_cases.json
 
 # Node（Mermaid 描画チェック用の一時依存。恒久的な JS 依存管理はしない）
 node_modules/
@@ -40,3 +41,6 @@ package-lock.json
 *.tfstate.*
 crash.log
 *.tfplan
+
+# デモ撮影の生素材（GIF/PNG は docs/images/ に選別コピーする）
+scripts/demo_capture/out/

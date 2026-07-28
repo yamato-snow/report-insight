@@ -77,6 +77,7 @@ ignore = [
 "app/api/routers/ui.py" = ["E501"]               # 埋め込みHTML/JS文字列
 "tools/benchmarks/**" = ["T20"]                  # 計測CLI: 進捗・結果を標準出力に出す
 "tests/scenarios/run.py" = ["T20"]               # シナリオ実行CLI: 結果を標準出力に出す
+"scripts/demo_capture/**" = ["T20"]              # 撮影CLI: 進捗を標準出力に出す
 "app/api/routers/scenario_ui.py" = ["PLC0415"]   # tests依存を本番に持ち込まないため遅延import
 
 [tool.ruff.lint.isort]
