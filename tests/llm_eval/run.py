@@ -31,6 +31,7 @@ from app.services.ingest import IngestService
 from tests.llm_eval.datasets import (
     classification_cases,
     faithfulness_cases,
+    human_classification_cases,
     search_cases,
 )
 from tests.llm_eval.evaluators import (
@@ -118,7 +119,11 @@ def _parse_score(text: str) -> float | None:
 
 
 def _make_judge(settings):  # type: ignore[no-untyped-def]
-    """実APIの LLM-as-judge（1..5）。パース失敗時は None を返し、平均から除外する。"""
+    """実APIの LLM-as-judge（1..5）。パース失敗時は None を返し、平均から除外する。
+
+    採点には model_judge（生成モデルとは別）を使う。回答を生成したモデル自身に
+    採点させると自己採点バイアスが乗るため、審査員は分離する。
+    """
     client = AsyncAnthropic(api_key=settings.anthropic_api_key)
 
     async def judge(question: str, answer: str, grounded_fact: str) -> float | None:
@@ -133,7 +138,7 @@ def _make_judge(settings):  # type: ignore[no-untyped-def]
         # （temperature は新しめのモデルで非対応のため指定しない）。
         for _ in range(3):
             resp = await client.messages.create(
-                model=settings.model_generate,
+                model=settings.model_judge,
                 max_tokens=24,
                 system=system,
                 messages=[{"role": "user", "content": user}],
@@ -154,9 +159,12 @@ async def _run() -> EvalSummary:
     container = build_container(settings)
     summary = EvalSummary()
     try:
-        # 1) 分類（DB不要）
+        # 1) 分類（DB不要）: 合成100件 + 人間確認済みの還流ケース（あれば）
+        human_cases = human_classification_cases()
+        if human_cases:
+            summary.notes.append(f"還流ケース {len(human_cases)}件 を分類評価に追加")
         summary.classification = await eval_classification(
-            container.llm, container.masker, classification_cases(100)
+            container.llm, container.masker, classification_cases(100) + human_cases
         )
 
         # 2) 検索（DB必要）: 参照データ整備 → コーパス ingest → recall@k
@@ -210,10 +218,13 @@ def _print_and_persist(summary: EvalSummary) -> None:
         result["search"] = {
             "recall_at_k": round(s.recall_at_k, 4),
             "citation_existence_rate": round(s.citation_existence_rate, 4),
+            "hard_negative_win_rate": round(s.hard_negative_win_rate, 4),
             "passed": s.passed(),
         }
         print(  # noqa: T201
             f"検索: recall@8={s.recall_at_k:.3f} citation={s.citation_existence_rate:.3f} "
+            f"hard_neg_win={s.hard_negative_win_rate:.3f}"
+            f"({s.hard_negative_wins}/{s.hard_negative_total}) "
             f"-> {'PASS' if s.passed() else 'FAIL'}"
         )
     if summary.faithfulness is not None:

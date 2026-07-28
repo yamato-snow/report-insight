@@ -7,9 +7,13 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 
 from scripts.synth import Sample, generate
+
+_HUMAN_CASES_PATH = Path(__file__).resolve().parent / "human_cases.json"
 
 
 @dataclass(frozen=True)
@@ -23,11 +27,16 @@ class ClassificationCase:
 
 @dataclass(frozen=True)
 class SearchCase:
-    """一意な文書とその想定質問。ingest 後、質問で当該文書が top-k に入るかを見る。"""
+    """一意な文書とその想定質問。ingest 後、質問で当該文書が top-k に入るかを見る。
+
+    distractor_doc_id が付くケースはハードネガティブ評価: 語彙は近いが内容の異なる
+    「紛らわしい不正解文書」を指し、正解がそれより上位に来るかを別途測る。
+    """
 
     doc_id: str  # source_key に使う一意キー
     raw_text: str
     question: str
+    distractor_doc_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -51,6 +60,31 @@ def classification_cases(count: int = 100) -> list[ClassificationCase]:
                 expected_category=s.label.category.value,
                 expected_urgency=s.label.urgency.value,
                 tags=tuple(s.tags),
+            )
+        )
+    return cases
+
+
+def human_classification_cases(
+    path: Path = _HUMAN_CASES_PATH,
+) -> list[ClassificationCase]:
+    """人間確認済みの還流ケースを読む（scripts/export_eval_cases.py が生成）。
+
+    合成テンプレと違い「本番で実際に人が確定した正解ラベル」なので代表性が高い。
+    ファイルが無い・空の場合は空リスト（還流前の状態を許容する）。
+    """
+    if not path.exists():
+        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    cases: list[ClassificationCase] = []
+    for item in data.get("cases", []):
+        cases.append(
+            ClassificationCase(
+                raw_text=str(item["raw_text"]),
+                reporter_role=str(item["reporter_role"]),
+                expected_category=str(item["expected_category"]),
+                expected_urgency=str(item["expected_urgency"]),
+                tags=tuple(item.get("tags", ["human_verified"])),
             )
         )
     return cases
@@ -91,11 +125,80 @@ _SEARCH_DOCS: list[tuple[str, str]] = [
 ]
 
 
+# --- ハードネガティブ10問（語彙は既存文書と重なるが内容が異なる） ------------
+#
+# recall@k はコーパスが小さいうちは易しく飽和する。ここでは「同じ設備名を含む別事象」を
+# 意図的に置き、質問に対して正解が紛らわしい文書より上位に来るか（win rate）を測る。
+# タプル: (本文, 質問, 紛らわしい既存文書の _SEARCH_DOCS インデックス)
+_HARD_NEGATIVES: list[tuple[str, str, int]] = [
+    (
+        "エレベーターの走行音がうるさいと2階入居者から苦情。巻上機の防振ゴム劣化を調査予定。",
+        "エレベーターの騒音に関する苦情",
+        2,  # エレベーター停止（故障）と混同しやすい
+    ),
+    (
+        "3階居室の窓ガラスの結露がひどくサッシ枠にカビが発生。換気の指導と防露フィルムを検討。",
+        "窓の結露とカビの相談",
+        0,  # 窓ガラスのひび割れと混同しやすい
+    ),
+    (
+        "宅配ボックスの扉が物理的に変形して閉まらない。いたずらの可能性があり警察へ相談予定。",
+        "宅配ボックスの扉の変形",
+        7,  # 電子錠の電池切れと混同しやすい
+    ),
+    (
+        "屋上防水の全面改修工事について3社から見積を取得。次年度予算での実施を計画中。",
+        "屋上防水の改修工事の計画",
+        3,  # 防水シートの浮き（不具合報告）と混同しやすい
+    ),
+    (
+        "駐車場ゲートのリモコン送信機を増設してほしいと入居者から要望があった。",
+        "駐車場ゲートのリモコン追加の要望",
+        20,  # ゲートバーの故障と混同しやすい
+    ),
+    (
+        "火災報知器の電池切れ警告音が鳴っているとの連絡。該当住戸の電池交換で解消した。",
+        "報知器の電池切れ警告への対応",
+        13,  # 報知器の誤作動と混同しやすい
+    ),
+    (
+        "外壁タイルの汚れが目立つため高圧洗浄を実施。美観が回復した。",
+        "外壁タイルの洗浄作業",
+        18,  # タイルの剥落と混同しやすい
+    ),
+    (
+        "受水槽の法定清掃を実施し、水質検査も適合。報告書を保管した。",
+        "受水槽の清掃と水質検査",
+        5,  # 受水槽の漏水と混同しやすい
+    ),
+    (
+        "エントランス自動ドアのガラスに衝突防止シールを追加で貼付した。",
+        "自動ドアの衝突防止対策",
+        23,  # センサー不良と混同しやすい
+    ),
+    (
+        "敷地内側溝のコンクリート蓋が破損し段差が発生。仮養生のうえ交換を手配。",
+        "側溝の蓋の破損",
+        15,  # 側溝の落ち葉詰まりと混同しやすい
+    ),
+]
+
+
 def search_cases() -> list[SearchCase]:
-    return [
+    base = [
         SearchCase(doc_id=f"eval/search/{i:03d}.json", raw_text=doc, question=q)
         for i, (doc, q) in enumerate(_SEARCH_DOCS)
     ]
+    hard = [
+        SearchCase(
+            doc_id=f"eval/search/h{i:03d}.json",
+            raw_text=doc,
+            question=q,
+            distractor_doc_id=f"eval/search/{d:03d}.json",
+        )
+        for i, (doc, q, d) in enumerate(_HARD_NEGATIVES)
+    ]
+    return base + hard
 
 
 # --- 忠実性20問（検索文書の事実に基づく。judge が根拠適合を採点） --------------
