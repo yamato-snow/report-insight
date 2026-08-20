@@ -1,0 +1,52 @@
+[
+  {
+    "name": "v1_baseline",
+    "label": "V1 ベースライン（本番 classify_v1）",
+    "total": 100,
+    "accuracy": 0.96,
+    "high_recall": 1.0,
+    "errors": 0,
+    "high_total": 27,
+    "high_hit": 27
+  },
+  {
+    "name": "v2_degraded",
+    "label": "V2 劣化版（役割・定義・出力形式を削る）",
+    "total": 100,
+    "accuracy": 0.77,
+    "high_recall": 0.8888888888888888,
+    "errors": 0,
+    "high_total": 27,
+    "high_hit": 24
+  },
+  {
+    "name": "v3_criteria",
+    "label": "V3 判断基準の明文化（high の条件を列挙）",
+    "total": 100,
+    "accuracy": 0.95,
+    "high_recall": 1.0,
+    "errors": 0,
+    "high_total": 27,
+    "high_hit": 27
+  },
+  {
+    "name": "v4_fewshot",
+    "label": "V4 Few-shot（境界事例3件）",
+    "total": 100,
+    "accuracy": 0.94,
+    "high_recall": 1.0,
+    "errors": 0,
+    "high_total": 27,
+    "high_hit": 27
+  },
+  {
+    "name": "v5_asymmetric",
+    "label": "V5 非対称コスト（迷ったら high に倒す）",
+    "total": 100,
+    "accuracy": 0.98,
+    "high_recall": 1.0,
+    "errors": 0,
+    "high_total": 27,
+    "high_hit": 27
+  }
+]

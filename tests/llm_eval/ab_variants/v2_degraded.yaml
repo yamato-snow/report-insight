@@ -1,0 +1,28 @@
+# 【実験用 V2】劣化版。役割定義・カテゴリ定義・緊急度定義・出力形式の指示を削り、曖昧な指示だけ残す。
+# 狙い: 精度が実際に下がることを確認し、評価が効いていることを示す。
+version: ab_v2_degraded
+model_role: classify
+system: |
+  報告書を読んで、内容に合わせて適切に分類してください。緊急度も判断してください。
+tool:
+  name: classify_report
+  description: 報告書の分類・構造化結果を返す
+  input_schema:
+    type: object
+    properties:
+      category:
+        type: string
+        enum: [cleaning, equipment_failure, claim, other]
+      urgency:
+        type: string
+        enum: [high, medium, low]
+      action_required:
+        type: boolean
+      normalized_summary:
+        type: string
+        description: 統制語で正規化した1〜2文の要約
+      confidence:
+        type: number
+        minimum: 0.0
+        maximum: 1.0
+    required: [category, urgency, action_required, normalized_summary, confidence]
