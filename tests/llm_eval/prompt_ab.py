@@ -83,7 +83,7 @@ async def _run_variant(
         model_generate=settings.model_generate,
     )
     # ★ここが差し替え点。本番コードは触らない。
-    client._classify_prompt = prompt  # noqa: SLF001
+    client._classify_prompt = prompt
 
     sem = asyncio.Semaphore(CONCURRENCY)
     correct = 0
@@ -101,7 +101,7 @@ async def _run_variant(
                 ok = predicted.category.value == case.expected_category
                 is_high_expected = case.expected_urgency == Urgency.HIGH.value
                 is_high_pred = predicted.urgency is Urgency.HIGH
-            except Exception:  # 失敗は「不正解」ではなく errors として別勘定にする
+            except Exception:  # noqa: BLE001 — 失敗は「不正解」に混ぜず errors として別勘定にする
                 async with lock:
                     errors += 1
                     if case.expected_urgency == Urgency.HIGH.value:
