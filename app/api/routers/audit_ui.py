@@ -6,20 +6,18 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 
 from app.api.deps import ContainerDep
 from app.api.labels import template_context
-from app.domain.entities import User
-from app.domain.errors import NotFoundError
+from app.api.routers._ui_shared import TEMPLATES, all_users, resolve_user
+from app.domain.labels import CATEGORY_JP, URGENCY_JP
+from app.domain.values import Category, Urgency
 
 router = APIRouter(tags=["audit-ui"])
-
-_TEMPLATES = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 
 AUDIT_LIMIT = 100
 
@@ -30,12 +28,28 @@ ACTION_LABELS = {
 }
 
 
-async def _resolve_user(container: ContainerDep, uid: int) -> User:
-    async with container.session_factory() as session:
-        try:
-            return await container.user_repository(session).get(uid)
-        except NotFoundError as exc:
-            raise HTTPException(status_code=401, detail="不明な利用者です") from exc
+def _format_payload(action: str, payload: dict[str, Any]) -> str:
+    """payload(JSON) を読める日本語へ。未知の形は素通しし、表記は labels.py に委ねる。"""
+    try:
+        if action == "override_analysis":
+            category = CATEGORY_JP[Category(payload["category"])]
+            urgency = URGENCY_JP[Urgency(payload["urgency"])]
+            action_req = "要対応" if payload.get("action_required") else "対応不要"
+            return (
+                f"報告書 #{payload['report_id']} を"
+                f"「{category}・緊急度 {urgency}・{action_req}」に確定"
+            )
+        if action == "approve_monthly":
+            year, month = str(payload["month"])[:7].split("-")
+            return (
+                f"物件 #{payload['property_id']} の {int(year)}年{int(month)}月分"
+                f"（v{payload['version']}）を確定"
+            )
+        if action == "search":
+            return f"「{payload['query']}」で過去事例を検索"
+    except (KeyError, ValueError):
+        pass  # 想定外の形は生表示にフォールバック
+    return " / ".join(f"{k}={v}" for k, v in payload.items())
 
 
 @router.get("/audit", response_class=HTMLResponse)
@@ -44,19 +58,26 @@ async def audit_home(
     container: ContainerDep,
     uid: int = Query(..., description="dev用の利用者ID（SSO抽象点）"),
 ) -> HTMLResponse:
-    user = await _resolve_user(container, uid)
+    user = await resolve_user(container, uid)
     async with container.session_factory() as session:
         entries = await container.audit_repository(session).list_recent(AUDIT_LIMIT)
-        users = await container.user_repository(session).list_all()
-    return _TEMPLATES.TemplateResponse(
+    rows = [
+        {
+            "created_at": e.created_at,
+            "actor_email": e.actor_email,
+            "action_label": ACTION_LABELS.get(e.action.value, e.action.value),
+            "detail": _format_payload(e.action.value, e.payload),
+        }
+        for e in entries
+    ]
+    return TEMPLATES.TemplateResponse(
         request,
         "audit.html",
         {
             "user": user,
             "uid": uid,
-            "users": users,
-            "entries": entries,
-            "action_labels": ACTION_LABELS,
+            "users": await all_users(container),
+            "rows": rows,
             "active_nav": "audit",
             **template_context(),
         },

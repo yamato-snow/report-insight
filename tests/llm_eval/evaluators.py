@@ -72,6 +72,8 @@ async def eval_search(
     qa = user or User(id=2, email="qa@e.com", role=Role.QA, branch_id=None)
     permitted = await repository.permitted_property_ids(qa)
     hits_in_topk = 0
+    hard_total = 0
+    hard_wins = 0
     all_cited: set[int] = set()
     for case in cases:
         expected_id = doc_id_to_report_id[case.doc_id]
@@ -83,6 +85,16 @@ async def eval_search(
         if expected_id in top_ids:
             hits_in_topk += 1
         all_cited.update(top_ids)
+        # ハードネガティブ: 正解が紛らわしい文書より上位なら win。
+        # 正解が top-k 圏外なら無条件で負け（順位を主張できないため）。
+        if case.distractor_doc_id is not None:
+            hard_total += 1
+            distractor_id = doc_id_to_report_id[case.distractor_doc_id]
+            if expected_id in top_ids and (
+                distractor_id not in top_ids
+                or top_ids.index(expected_id) < top_ids.index(distractor_id)
+            ):
+                hard_wins += 1
     existing = await repository.existing_report_ids(list(all_cited), permitted)
     citation_rate = len(all_cited & existing) / len(all_cited) if all_cited else 1.0
     total = len(cases)
@@ -90,6 +102,8 @@ async def eval_search(
         total=total,
         recall_at_k=hits_in_topk / total if total else 0.0,
         citation_existence_rate=citation_rate,
+        hard_negative_total=hard_total,
+        hard_negative_wins=hard_wins,
     )
 
 

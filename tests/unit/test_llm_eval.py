@@ -7,11 +7,13 @@ injection 判定・メトリクス閾値ロジックが壊れていないこと�
 from __future__ import annotations
 
 import pytest
+from scripts.export_eval_cases import merge as merge_eval_cases
 
 from app.infra.llm.fake_client import FakeLLMClient
 from tests.llm_eval.datasets import (
     classification_cases,
     faithfulness_cases,
+    human_classification_cases,
     search_cases,
 )
 from tests.llm_eval.evaluators import eval_classification, parse_citations
@@ -25,13 +27,41 @@ from tests.unit.fakes import FakeMasker
 
 def test_dataset_sizes_meet_spec() -> None:
     assert len(classification_cases(100)) == 100
-    assert len(search_cases()) == 30
+    # 検索: 基本30問 + ハードネガティブ10問（LLM設計書 §4）
+    assert len(search_cases()) == 40
     assert len(faithfulness_cases()) == 20
     # doc_id は一意（recall@k の1:1対応の前提）
     doc_ids = [c.doc_id for c in search_cases()]
     assert len(set(doc_ids)) == len(doc_ids)
     # injection 検体が分類セットに含まれる
     assert any("injection" in c.tags for c in classification_cases(100))
+
+
+def test_hard_negatives_reference_existing_docs() -> None:
+    cases = search_cases()
+    hard = [c for c in cases if c.distractor_doc_id is not None]
+    assert len(hard) == 10
+    doc_ids = {c.doc_id for c in cases}
+    for case in hard:
+        # 紛らわしい文書は同一コーパス内の実在文書を指す（自己参照は不可）
+        assert case.distractor_doc_id in doc_ids
+        assert case.distractor_doc_id != case.doc_id
+
+
+def test_search_report_hard_negative_win_rate() -> None:
+    # 10問中8勝 → 0.8。ハードネガティブ0問なら 1.0（未計測を失格にしない）
+    r = SearchReport(
+        total=40,
+        recall_at_k=0.9,
+        citation_existence_rate=1.0,
+        hard_negative_total=10,
+        hard_negative_wins=8,
+    )
+    assert r.hard_negative_win_rate == pytest.approx(0.8)
+    none_measured = SearchReport(total=30, recall_at_k=0.9, citation_existence_rate=1.0)
+    assert none_measured.hard_negative_win_rate == 1.0
+    # 合否は従来指標のみで決まる（win rate は観測用）
+    assert r.passed()
 
 
 async def test_eval_classification_runs_with_fake() -> None:
@@ -84,3 +114,33 @@ def test_parse_citations() -> None:
 
 def test_threshold_constant_is_090() -> None:
     assert THRESHOLD_CLASSIFY_ACCURACY == pytest.approx(0.90)
+
+
+def test_human_cases_loader_roundtrip(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """export_eval_cases.merge → human_classification_cases の往復と重複排除。"""
+    out = tmp_path / "human_cases.json"
+    case = {
+        "source_key": "reports/2026-06/0042.json",
+        "raw_text": "1階の集合ポスト付近に落書きを発見しました。",
+        "reporter_role": "管理員",
+        "expected_category": "cleaning",
+        "expected_urgency": "low",
+        "expected_action_required": False,
+        "tags": ["human_verified"],
+    }
+    added, total = merge_eval_cases(out, [case])
+    assert (added, total) == (1, 1)
+
+    # 同じ source_key の再修正は後勝ちで置き換え（件数は増えない）
+    revised = dict(case, expected_category="claim")
+    added, total = merge_eval_cases(out, [revised])
+    assert (added, total) == (0, 1)
+
+    loaded = human_classification_cases(out)
+    assert len(loaded) == 1
+    assert loaded[0].expected_category == "claim"
+    assert "human_verified" in loaded[0].tags
+
+
+def test_human_cases_missing_file_is_empty(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    assert human_classification_cases(tmp_path / "nope.json") == []

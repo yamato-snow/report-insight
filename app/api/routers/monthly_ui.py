@@ -8,40 +8,29 @@ API（/api/v1/monthly-reports）は実装済みで、この層はその画面提
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from fastapi.templating import Jinja2Templates
 
 from app.api.deps import ContainerDep, PdfRendererDep
 from app.api.labels import template_context
+from app.api.routers._ui_shared import TEMPLATES, resolve_user
 from app.core.db import unit_of_work
 from app.core.di import Container
 from app.core.logging import get_logger
 from app.domain.entities import User
-from app.domain.errors import InvalidStateError, NotFoundError
+from app.domain.errors import InvalidStateError
 from app.domain.values import MonthlyStatus
 
 router = APIRouter(tags=["monthly-ui"])
 logger = get_logger(__name__)
 
-_TEMPLATES = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
-
 # 生成対象として選べる月数（当月から遡る）
 MONTH_CHOICES = 6
 
 
-async def _resolve_user(container: ContainerDep, uid: int) -> User:
-    async with container.session_factory() as session:
-        try:
-            return await container.user_repository(session).get(uid)
-        except NotFoundError as exc:
-            raise HTTPException(status_code=401, detail="不明な利用者です") from exc
-
-
 async def _common(container: ContainerDep, uid: int) -> dict[str, object]:
-    user = await _resolve_user(container, uid)
+    user = await resolve_user(container, uid)
     async with container.session_factory() as session:
         props = await container.admin_service(session).list_properties(user)
         users = await container.user_repository(session).list_all()
@@ -85,7 +74,7 @@ async def monthly_home(
     user: User = ctx["user"]  # type: ignore[assignment]
     async with container.session_factory() as session:
         reports = await container.monthly_service(session).list_for_user(user)
-    return _TEMPLATES.TemplateResponse(
+    return TEMPLATES.TemplateResponse(
         request,
         "monthly_list.html",
         {
@@ -107,7 +96,7 @@ async def monthly_generate(
     month: str = Form(...),
 ) -> RedirectResponse:
     """ドラフト生成を依頼し、編集画面へ送る（生成中はポーリング表示になる）。"""
-    user = await _resolve_user(container, uid)
+    user = await resolve_user(container, uid)
     async with unit_of_work(container.session_factory) as session:
         report = await container.monthly_service(session).request_generation(
             user, property_id, date.fromisoformat(month)
@@ -132,7 +121,7 @@ async def monthly_detail(
     user: User = ctx["user"]  # type: ignore[assignment]
     async with container.session_factory() as session:
         report = await container.monthly_service(session).get(user, monthly_id)
-    return _TEMPLATES.TemplateResponse(
+    return TEMPLATES.TemplateResponse(
         request,
         "monthly_detail.html",
         {
@@ -153,7 +142,7 @@ async def monthly_save(
     uid: int = Query(...),
     body_markdown: str = Form(...),
 ) -> RedirectResponse:
-    user = await _resolve_user(container, uid)
+    user = await resolve_user(container, uid)
     async with unit_of_work(container.session_factory) as session:
         await container.monthly_service(session).save_draft(user, monthly_id, body_markdown)
     return RedirectResponse(f"/monthly/{monthly_id}?uid={uid}&saved=true", status_code=303)
@@ -167,7 +156,7 @@ async def monthly_approve(
     body_markdown: str = Form(...),
 ) -> RedirectResponse:
     """編集中の内容を保存してから承認する（画面の見た目と確定内容を一致させる）。"""
-    user = await _resolve_user(container, uid)
+    user = await resolve_user(container, uid)
     async with unit_of_work(container.session_factory) as session:
         service = container.monthly_service(session)
         await service.save_draft(user, monthly_id, body_markdown)
@@ -183,7 +172,7 @@ async def monthly_pdf(
     uid: int = Query(...),
 ) -> Response:
     """確定版（および draft）の PDF ダウンロード。描画は API 側と同じレンダラを使う。"""
-    user = await _resolve_user(container, uid)
+    user = await resolve_user(container, uid)
     async with container.session_factory() as session:
         report = await container.monthly_service(session).get(user, monthly_id)
     if report.status not in (MonthlyStatus.DRAFT, MonthlyStatus.APPROVED):

@@ -2,7 +2,7 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help setup up down down-v migrate demo test test-integration test-pdf check-mermaid eval eval-loop scenario lint fmt shell logs
+.PHONY: help setup up down down-v migrate demo test test-integration test-pdf check-mermaid eval eval-loop eval-reflow scenario lint fmt shell logs
 
 help: ## このヘルプを表示
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -39,6 +39,9 @@ eval: ## LLM評価ハーネス（実API・要APIキー。LLM設計書 §4）
 
 eval-loop: ## 劣化検知→改善フローの閉ループ実証（実APIなし・決定的・課金ゼロ）
 	uv run python -m tests.llm_eval.loop_demo
+
+eval-reflow: ## 人間確認済み分類を評価セットへ還流（DB必要・課金ゼロ。LLM設計書 §4）
+	$(COMPOSE) run --rm api python -m scripts.export_eval_cases
 
 scenario: ## 受入シナリオ（実APIなし・決定的・課金ゼロ）。NAME=xxx で1本に絞る
 	uv run python -m tests.scenarios.run $(if $(NAME),--name $(NAME),)

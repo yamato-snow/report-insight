@@ -1,13 +1,14 @@
 {# 全画面共通のヘッダ。利用者切替は SSO の抽象点（dev のみ）で、本番はセッションに置換する。 #}
 <div class="topbar">
   <div class="nav">
-    <a href="/">検索</a>
+    <a class="brand" href="/?uid={{ uid }}">Report Insight</a>
+    <a href="/search?uid={{ uid }}" {% if active_nav == "search" %}class="active"{% endif %}>過去事例検索</a>
     <a href="/admin?uid={{ uid }}" {% if active_nav == "admin" %}class="active"{% endif %}>報告書</a>
     <a href="/monthly?uid={{ uid }}" {% if active_nav == "monthly" %}class="active"{% endif %}>月次報告書</a>
     <a href="/audit?uid={{ uid }}" {% if active_nav == "audit" %}class="active"{% endif %}>監査ログ</a>
   </div>
   <div class="whoami">
-    <span>利用者</span>
+    <span title="デモ用の利用者切替。SSO 導入時はログインセッションに置き換わります">利用者</span>
     <select onchange="location.search = '?uid=' + this.value">
       {% for u in users %}
       <option value="{{ u.id }}" {% if u.id == uid %}selected{% endif %}>

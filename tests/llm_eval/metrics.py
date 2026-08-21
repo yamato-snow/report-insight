@@ -40,6 +40,16 @@ class SearchReport:
     total: int
     recall_at_k: float
     citation_existence_rate: float
+    # ハードネガティブ: 正解が紛らわしい不正解文書より上位に来た割合。
+    # 観測用メトリクス（合否には含めない。閾値化は実測の分布を見てから判断する）。
+    hard_negative_total: int = 0
+    hard_negative_wins: int = 0
+
+    @property
+    def hard_negative_win_rate(self) -> float:
+        if self.hard_negative_total == 0:
+            return 1.0
+        return self.hard_negative_wins / self.hard_negative_total
 
     def passed(self) -> bool:
         return (

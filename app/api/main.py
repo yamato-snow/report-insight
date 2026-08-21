@@ -19,6 +19,7 @@ from app.api.routers import (
     reports,
     scenario_ui,
     search,
+    search_ui,
     ui,
 )
 from app.core.config import get_settings
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(health.router)
     app.include_router(ui.router)
+    app.include_router(search_ui.router)
     app.include_router(admin_ui.router)
     app.include_router(monthly_ui.router)
     app.include_router(audit_ui.router)
