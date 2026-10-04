@@ -181,3 +181,7 @@ predecessor: p3-vpc-endpoints-prod_plan.md
   - Phase 1: Dockerfile の RUN 行を revert（実行時 DL に戻る）
 - 順序制約: Phase 4 のロールバックを**最初に**行うこと（/0 が無い状態で Phase 2/3 を
   戻すと外部到達が失われ通知・LLM が停止する）
+
+## eng-lead の判断（2026-10-04）＝保留（status は draft のまま）
+
+理由は3つです。①report-insight は実運用の無いポートフォリオで、Phase 4 の apply は AWS の費用が出ます（費用は CEO 判断）。②着手順は「あと少しで閉じるものから」で、残り Phase が4つあるこの plan は後ろです。③Phase 0 の Bedrock のモデル提供確認は未実施です。再開の条件は、CEO が report-insight を面談素材として更新する必要を示したとき、または Bedrock を含む AWS の費用枠を決めたときです。それまで approved にしません。

@@ -1,7 +1,7 @@
 ---
 date: 2026-07-20
 model: fable
-status: approved
+status: done
 issue: ""
 topic: tfstate backend 修復（自アカウントの S3+DynamoDB を bootstrap Terraform で作成）
 predecessor: p2-observability-metrics-cost-alarm_handoff.md
@@ -86,3 +86,7 @@ predecessor: p2-observability-metrics-cost-alarm_handoff.md
 - 作成したバケット/テーブルが不要になった場合: `prevent_destroy` を外して
   `terraform -chdir=terraform/bootstrap destroy`（バージョニングされたオブジェクトの
   空化が必要な場合は s3api で削除してから）。費用影響は数円/月なので放置でも実害なし
+
+## 決着（2026-10-04・eng-lead）
+
+実装は 2026-08-21 のコミット a54fe0c（feat(iac): tfstate の保管先を bootstrap Terraform で用意する、PR #14）で main に入っています。status を approved から done へ直しました。完了条件のチェックは当時埋めていないため、後から埋めずに根拠だけ残します。envs/dev・envs/prod の apply は対象外のままで、費用が出るため CEO の判断です。

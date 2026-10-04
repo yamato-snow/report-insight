@@ -1,7 +1,7 @@
 ---
 date: 2026-07-18
 model: opus
-status: ready
+status: done
 issue: ""
 topic: report-insight P1 実装（F-3/F-4・評価・IaC・CI仕上げ）引き継ぎ
 predecessor: report-insight-1day_plan.md
@@ -156,3 +156,7 @@ make eval              # 実API評価（要 LLM_PROVIDER=anthropic + APIキー�
 
 ## 7. ロールバック
 - 新規リポジトリ・外部副作用なし。コミット単位 `git revert`、ローカルDBは `make down-v` で再構築。
+
+## 決着（2026-10-04・eng-lead）
+
+本文「現在地」の P1 項目（F-3・F-4・評価ハーネス・Terraform・CI・Runbook）はすべてチェック済みで、以後の PR #10〜#14 も main に入っています。frontmatter の `ready` は plan の語彙（draft/approved/in-progress/done）に無いため done へ直しました。

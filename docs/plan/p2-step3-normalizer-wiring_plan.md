@@ -1,7 +1,7 @@
 ---
 date: 2026-07-20
 model: fable
-status: draft
+status: done
 issue: ""
 topic: 表記ゆれ正規化器の IngestService 本番配線（P2 第3歩）
 predecessor: p2-observability-metrics-cost-alarm_handoff.md
@@ -82,3 +82,7 @@ predecessor: p2-observability-metrics-cost-alarm_handoff.md
 
 - 未 apply・アプリ層のみの変更。`git revert` 1コミットで完結
 - 緊急時は `NORMALIZER_CORRECTIONS_PATH` を未設定に戻すだけで無変換（従来挙動）に戻る
+
+## 決着（2026-10-04・eng-lead）
+
+実装は 2026-07-23 のコミット 72f52e2（feat(ingest): 表記ゆれ正規化器を IngestService へ本番配線、PR #10）で main に入っています。status を draft から done へ直しました。完了条件のチェックは当時埋めていないため、後から埋めずに根拠だけ残します。

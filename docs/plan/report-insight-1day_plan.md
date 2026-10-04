@@ -1,7 +1,7 @@
 ---
 date: 2026-07-17
 model: fable
-status: approved
+status: done
 issue: ""
 topic: report-insight 1日実装計画
 ---
@@ -95,3 +95,7 @@ P0 が崩れたら P1 以降を翌日に送る判断をユーザーに仰ぐ（�
 | 実API評価のコスト・レート | 評価は夕方に1回のみ。開発中は FakeLLMClient |
 | fastembed モデルDLに時間 | 午前①の足場段階で先行DLを Makefile に入れる |
 | WeasyPrint のネイティブ依存 | Docker イメージ内で完結させる（ローカル直インストールに依存しない） |
+
+## 決着（2026-10-04・eng-lead）
+
+P0（足場・F-1・F-2）は 2026-07-18 に完了し、残りの P1 は report-insight-p1_plan.md へ引き継いで同 plan の P1 項目がすべてチェック済みです。本 plan の役目は終わっているので status を approved から done へ直しました。完了条件のチェックは当時埋めていないため、後から埋めずに根拠だけ残します。
