@@ -11,9 +11,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 # WeasyPrint(pango/cairo) と fastembed(onnxruntime) の実行時ライブラリ。
 # fonts-noto-cjk は月次報告書PDFの日本語描画に必須（無いと全文字が豆腐□になる。F-3-3）。
+# libharfbuzz-subset0 は WeasyPrint がフォントの部分埋め込みに使う。70.0 から
+# 「将来の版で必須になる」と DeprecationWarning が出るため、先に入れておく。
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         libpango-1.0-0 libpangocairo-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 \
+        libharfbuzz-subset0 \
         libffi-dev libjpeg62-turbo shared-mime-info \
         libgomp1 \
         fonts-noto-cjk \
